@@ -1,0 +1,239 @@
+using MetaRecord.Models;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using System.Reflection;
+
+namespace MetaRecord.Data;
+
+/// <summary>
+/// Entity storage using SQLite with metadata-driven SQL generation.
+/// Uses raw SQL based on metadata definitions rather than EF Core entity tracking.
+/// </summary>
+public class EntityStore
+{
+    private static EntityStore? _current;
+    public static EntityStore Current => _current ??= new EntityStore();
+
+    private readonly string _connectionString;
+
+    public EntityStore()
+    {
+        var folder = Environment.CurrentDirectory;
+        var dbPath = Path.Join(folder, "metarecord.db");
+        _connectionString = $"Data Source={dbPath}";
+    }
+
+    /// <summary>
+    /// Ensures the entity table exists based on metadata.
+    /// Honors <see cref="PropertyMetadata.MaxLength"/>, <see cref="PropertyMetadata.IsUnique"/>,
+    /// <see cref="PropertyMetadata.IsPrimaryKey"/>, and <see cref="PropertyMetadata.DefaultValue"/>.
+    /// </summary>
+    public void EnsureTableExists(IObjectMetadata metadata)
+    {
+        var pkProp = metadata.Properties.FirstOrDefault(p => p.IsPrimaryKey)
+                     ?? metadata.Properties.FirstOrDefault(p => p.Name == "Id");
+
+        var columns = new List<string>();
+        foreach (var prop in metadata.Properties)
+        {
+            var sqlType = GetSqliteType(prop.ClrType, prop.MaxLength);
+            var parts = new List<string> { prop.ColumnName, sqlType };
+
+            if (prop == pkProp)
+                parts.Add("PRIMARY KEY");
+            if (prop.IsRequired && prop != pkProp)
+                parts.Add("NOT NULL");
+            if (prop.IsUnique && prop != pkProp)
+                parts.Add("UNIQUE");
+            if (!string.IsNullOrWhiteSpace(prop.DefaultValue))
+                parts.Add($"DEFAULT {prop.DefaultValue}");
+
+            columns.Add(string.Join(" ", parts));
+        }
+
+        // Fallback when metadata has no Id and no property marked primary key.
+        if (pkProp == null)
+            columns.Insert(0, "Id TEXT PRIMARY KEY");
+
+        var createSql = $"CREATE TABLE IF NOT EXISTS {metadata.TableName} ({string.Join(", ", columns)})";
+        ExecuteNonQuery(createSql);
+    }
+
+    /// <summary>
+    /// Inserts an entity using metadata-driven SQL.
+    /// </summary>
+    public void Insert<T>(T entity, IObjectMetadata metadata) where T : class
+    {
+        var columns = new List<string>();
+        var parameters = new List<string>();
+        var values = new List<SqliteParameter>();
+
+        foreach (var prop in metadata.Properties)
+        {
+            var propertyInfo = typeof(T).GetProperty(prop.Name);
+            if (propertyInfo != null)
+            {
+                columns.Add(prop.ColumnName);
+                parameters.Add($"@{prop.Name}");
+                var value = propertyInfo.GetValue(entity);
+                // Convert Guid to string for SQLite TEXT storage
+                if (value is Guid guidValue)
+                    value = guidValue.ToString();
+                values.Add(new SqliteParameter($"@{prop.Name}", value ?? DBNull.Value));
+            }
+        }
+
+        var sql = $"INSERT INTO {metadata.TableName} ({string.Join(", ", columns)}) VALUES ({string.Join(", ", parameters)})";
+        ExecuteNonQuery(sql, values.ToArray());
+    }
+
+    /// <summary>
+    /// Updates an entity using metadata-driven SQL.
+    /// </summary>
+    public void Update<T>(T entity, IObjectMetadata metadata, Guid id) where T : class
+    {
+        var setClauses = new List<string>();
+        var values = new List<SqliteParameter>();
+
+        foreach (var prop in metadata.Properties.Where(p => p.Name != "Id"))
+        {
+            var propertyInfo = typeof(T).GetProperty(prop.Name);
+            if (propertyInfo != null)
+            {
+                setClauses.Add($"{prop.ColumnName} = @{prop.Name}");
+                var value = propertyInfo.GetValue(entity);
+                // Convert Guid to string for SQLite TEXT storage
+                if (value is Guid guidValue)
+                    value = guidValue.ToString();
+                values.Add(new SqliteParameter($"@{prop.Name}", value ?? DBNull.Value));
+            }
+        }
+
+        values.Add(new SqliteParameter("@Id", id.ToString()));
+        var sql = $"UPDATE {metadata.TableName} SET {string.Join(", ", setClauses)} WHERE Id = @Id";
+        ExecuteNonQuery(sql, values.ToArray());
+    }
+
+    /// <summary>
+    /// Deletes an entity by ID.
+    /// </summary>
+    public void Delete(IObjectMetadata metadata, Guid id)
+    {
+        var sql = $"DELETE FROM {metadata.TableName} WHERE Id = @Id";
+        ExecuteNonQuery(sql, new SqliteParameter("@Id", id.ToString()));
+    }
+
+    /// <summary>
+    /// Finds an entity by ID using metadata-driven SQL.
+    /// </summary>
+    public T? Find<T>(IObjectMetadata metadata, Guid id) where T : class, new()
+    {
+        var sql = $"SELECT * FROM {metadata.TableName} WHERE Id = @Id";
+        
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        using var command = new SqliteCommand(sql, connection);
+        command.Parameters.Add(new SqliteParameter("@Id", id.ToString()));
+        
+        using var reader = command.ExecuteReader();
+        if (reader.Read())
+        {
+            return MapToEntity<T>(reader, metadata);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns all entities of a type.
+    /// </summary>
+    public List<T> All<T>(IObjectMetadata metadata) where T : class, new()
+    {
+        var sql = $"SELECT * FROM {metadata.TableName}";
+        var results = new List<T>();
+        
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        using var command = new SqliteCommand(sql, connection);
+        using var reader = command.ExecuteReader();
+        
+        while (reader.Read())
+        {
+            results.Add(MapToEntity<T>(reader, metadata));
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Counts all entities of a type.
+    /// </summary>
+    public int Count(IObjectMetadata metadata)
+    {
+        var sql = $"SELECT COUNT(*) FROM {metadata.TableName}";
+        
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        using var command = new SqliteCommand(sql, connection);
+        return Convert.ToInt32(command.ExecuteScalar());
+    }
+
+    private T MapToEntity<T>(SqliteDataReader reader, IObjectMetadata metadata) where T : class, new()
+    {
+        var entity = new T();
+        
+        foreach (var prop in metadata.Properties)
+        {
+            var propertyInfo = typeof(T).GetProperty(prop.Name);
+            if (propertyInfo != null)
+            {
+                var ordinal = reader.GetOrdinal(prop.ColumnName);
+                if (!reader.IsDBNull(ordinal))
+                {
+                    var value = reader.GetValue(ordinal);
+                    var convertedValue = ConvertValue(value, prop.ClrType);
+                    propertyInfo.SetValue(entity, convertedValue);
+                }
+            }
+        }
+        return entity;
+    }
+
+    private object? ConvertValue(object value, Type targetType)
+    {
+        if (value == DBNull.Value) return null;
+        
+        if (targetType == typeof(Guid))
+            return Guid.Parse(value.ToString()!);
+        if (targetType == typeof(decimal))
+            return Convert.ToDecimal(value);
+        if (targetType == typeof(int))
+            return Convert.ToInt32(value);
+        if (targetType == typeof(bool))
+            return Convert.ToBoolean(value);
+        if (targetType == typeof(DateTime))
+            return DateTime.Parse(value.ToString()!);
+            
+        return value;
+    }
+
+    private void ExecuteNonQuery(string sql, params SqliteParameter[] parameters)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        using var command = new SqliteCommand(sql, connection);
+        command.Parameters.AddRange(parameters);
+        command.ExecuteNonQuery();
+    }
+
+    private static string GetSqliteType(Type clrType, int? maxLength = null) => clrType.Name switch
+    {
+        "String" => maxLength is > 0 ? $"TEXT({maxLength})" : "TEXT",
+        "Int32" or "Int64" => "INTEGER",
+        "Decimal" or "Double" or "Single" => "REAL",
+        "Boolean" => "INTEGER",
+        "DateTime" => "TEXT",
+        "Guid" => "TEXT",
+        _ => "TEXT"
+    };
+
+    public static void Reset() => _current = new EntityStore();
+}

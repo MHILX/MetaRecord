@@ -1,0 +1,20 @@
+# Build output
+bin/
+obj/
+
+# Runtime SQLite database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# VS / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+.DS_Store
