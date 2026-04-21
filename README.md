@@ -44,6 +44,8 @@ Active Record, cataloged by Martin Fowler in *Patterns of Enterprise Application
 
 It is most useful when the domain model and the table layout line up closely (CRUD-heavy apps, admin tools, prototypes). The trade-off is tight coupling between domain logic and persistence: entities are harder to unit-test in isolation, and complex domains often outgrow it and migrate toward **Repository** + **Data Mapper** patterns. MetaRecord implements the "classic" form via the generic `ActiveRecord<T>` base class.
 
+> For a deeper comparison with the Repository pattern, including side-by-side code and use cases, see [docs/ActiveRecord-vs-Repository.md](docs/ActiveRecord-vs-Repository.md).
+
 ### What does "metadata-driven object modeling" mean?
 
 In a typical ORM, an entity's shape is fixed at compile time — via class definitions, attributes, or fluent configuration. A **metadata-driven** model flips that: the shape (tables, columns, types, constraints) lives as **data** that the runtime reads and acts on. The same engine can host any number of entities without code changes, and the set of entities can grow or change while the app is running.
