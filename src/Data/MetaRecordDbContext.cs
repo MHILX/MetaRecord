@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MetaRecord.Workflows.Persistence;
 
 namespace MetaRecord.Data;
 
@@ -11,6 +12,9 @@ public class MetaRecordDbContext : DbContext
     public DbSet<ObjectDefinitionEntity> ObjectDefinitions => Set<ObjectDefinitionEntity>();
     public DbSet<PropertyDefinitionEntity> PropertyDefinitions => Set<PropertyDefinitionEntity>();
     public DbSet<MetadataVersionEntity> MetadataVersions => Set<MetadataVersionEntity>();
+    public DbSet<WorkflowDefinitionEntity> WorkflowDefinitions => Set<WorkflowDefinitionEntity>();
+    public DbSet<WorkflowRunEntity> WorkflowRuns => Set<WorkflowRunEntity>();
+    public DbSet<WorkflowRunStepEntity> WorkflowRunSteps => Set<WorkflowRunStepEntity>();
 
     public string DbPath { get; }
 
@@ -20,8 +24,16 @@ public class MetaRecordDbContext : DbContext
         DbPath = Path.Join(folder, "metarecord.db");
     }
 
+    public MetaRecordDbContext(string dbPath)
+    {
+        DbPath = dbPath;
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseSqlite($"Data Source={DbPath}");
+    {
+        if (!options.IsConfigured)
+            options.UseSqlite($"Data Source={DbPath}");
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,6 +63,53 @@ public class MetaRecordDbContext : DbContext
         {
             entity.ToTable("MetadataVersion", "meta");
             entity.HasKey(e => e.Id);
+        });
+
+        modelBuilder.Entity<WorkflowDefinitionEntity>(entity =>
+        {
+            entity.ToTable("WorkflowDefinitions");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.ObjectName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.EventName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.DefinitionJson).IsRequired();
+            entity.HasIndex(e => e.Name);
+            entity.HasIndex(e => new { e.ObjectName, e.EventName, e.IsEnabled });
+
+            entity.HasMany(e => e.Runs)
+                  .WithOne(r => r.WorkflowDefinition)
+                  .HasForeignKey(r => r.WorkflowId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<WorkflowRunEntity>(entity =>
+        {
+            entity.ToTable("WorkflowRuns");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ObjectName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.EventName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.RecordId).HasMaxLength(100);
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.HasIndex(e => e.WorkflowId);
+            entity.HasIndex(e => new { e.ObjectName, e.EventName });
+            entity.HasIndex(e => e.Status);
+
+            entity.HasMany(e => e.Steps)
+                  .WithOne(s => s.Run)
+                  .HasForeignKey(s => s.RunId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<WorkflowRunStepEntity>(entity =>
+        {
+            entity.ToTable("WorkflowRunSteps");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.NodeId).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.NodeType).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.NodeLabel).HasMaxLength(200);
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.HasIndex(e => e.RunId);
+            entity.HasIndex(e => e.NodeId);
         });
     }
 }
