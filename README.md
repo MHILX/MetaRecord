@@ -56,12 +56,12 @@ In MetaRecord, `IObjectMetadata` and `PropertyMetadata` describe each entity. `E
 
 Metadata could live in code (attributes), config files (JSON/YAML), or a database. Putting it in a database adds capabilities that matter for long-lived systems:
 
-- **Runtime editability** — an admin UI or a migration script can add a property to `Product` while the app is running; the next `EnsureTableExists` call will alter the schema.
-- **Versioning & change detection** — the `MetadataVersion` table lets clients cheaply detect "has anything changed since I last loaded?" and refresh caches.
+- **Runtime editability** — an admin UI or a migration script can edit metadata rows without recompiling. In this demo, `EnsureTableExists` only creates missing tables; existing tables still need an explicit migration or reconciliation step when metadata changes.
+- **Versioning & change detection** — the `MetadataVersion` table lets clients cheaply detect "has anything changed since I last loaded?" if every metadata edit path bumps the version. This demo records version rows but does not poll them or refresh running caches.
 - **Multi-tenant variation** — different tenants (or environments) can ship different object definitions without branching code.
 - **Auditable history** — because metadata is just rows, it can be queried, diffed, and backed up with normal database tooling.
 
-The cost is a bootstrapping step (`MetadataLoader`) and an indirection — metadata has to be loaded before any entity code can run.
+The cost is a bootstrapping step (`MetadataLoader`) and an indirection — metadata has to be loaded before any entity code can run. The bigger long-term cost is **schema drift** between the three independent shapes (metadata rows, entity table, CLR class); see [docs/Schema-Drift-and-Guard-Rails.md](docs/Schema-Drift-and-Guard-Rails.md) for failure modes and concrete guard rails.
 
 ### How the three pieces fit together
 
@@ -145,6 +145,8 @@ MetaRecord/
 All data is stored in `metarecord.db` (SQLite):
 
 ### Metadata Tables (EF Core managed)
+
+The `meta.*` prefix below is the conceptual EF Core schema. SQLite does not implement schemas, so local database tools may display these tables without the prefix.
 
 | Table | Purpose |
 |-------|---------|
@@ -288,12 +290,16 @@ This is a teaching demo, not a production framework. Known gaps:
 
 - **Reflection on every call** — no compiled accessors or caching of `PropertyInfo` lookups.
 - **No migrations** — `EnsureTableExists` only creates tables; it does not `ALTER` them when metadata changes.
+- **No metadata cache invalidation** — `MetadataVersion` rows are written, but running processes do not poll them, and `ActiveRecord<T>` also caches metadata per CLR type.
 - **No transactions, no unit-of-work** — every `Save()` opens its own connection and commits immediately.
 - **No concurrency control** — last writer wins; no row versions or optimistic locks.
 - **Limited type mapping** — the CLR↔SQLite converter covers common primitives only; enums, `byte[]`, nullable value types, navigation properties, and collections are not supported.
+- **SQLite constraint caveats** — `MaxLength` is not enforced by SQLite, decimal values map to `REAL`, and precision/scale metadata is not honored.
 - **No relationships** — foreign keys, associations, and eager/lazy loading are out of scope.
 - **No validation pipeline** — `IsRequired`/`MaxLength` shape the schema but are not enforced before insert/update.
 - **Global state** — `EntityStore.Current` and `MetadataRegistry` are static, which complicates testing and multi-tenant isolation.
+- **Unvalidated metadata SQL identifiers** — table/column names and default expressions are interpolated from metadata; production code should validate or quote them before generating SQL.
+- **No drift detection** — metadata, entity tables, and CLR classes can diverge silently. See [docs/Schema-Drift-and-Guard-Rails.md](docs/Schema-Drift-and-Guard-Rails.md) for the failure modes and recommended guard rails.
 
 ## License
 
