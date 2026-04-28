@@ -1,8 +1,6 @@
 # Build output
 bin/
 obj/
-**/bin/
-**/obj/
 
 # Runtime SQLite database
 *.db
