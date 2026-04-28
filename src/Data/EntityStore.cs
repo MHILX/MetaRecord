@@ -23,6 +23,14 @@ public class EntityStore
         _connectionString = $"Data Source={dbPath}";
     }
 
+    public EntityStore(string dbPath)
+    {
+        if (string.IsNullOrWhiteSpace(dbPath))
+            throw new ArgumentException("Database path is required.", nameof(dbPath));
+
+        _connectionString = $"Data Source={dbPath}";
+    }
+
     /// <summary>
     /// Ensures the entity table exists based on metadata.
     /// Honors <see cref="PropertyMetadata.MaxLength"/>, <see cref="PropertyMetadata.IsUnique"/>,
@@ -85,6 +93,48 @@ public class EntityStore
 
         var sql = $"INSERT INTO {metadata.TableName} ({string.Join(", ", columns)}) VALUES ({string.Join(", ", parameters)})";
         ExecuteNonQuery(sql, values.ToArray());
+    }
+
+    public void InsertValues(IObjectMetadata metadata, IReadOnlyDictionary<string, object?> values)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(values);
+
+        var valueLookup = new Dictionary<string, object?>(values, StringComparer.OrdinalIgnoreCase);
+        var primaryKey = GetPrimaryKeyProperty(metadata);
+        if (primaryKey is not null && !valueLookup.ContainsKey(primaryKey.Name) && primaryKey.ClrType == typeof(Guid))
+            valueLookup[primaryKey.Name] = Guid.NewGuid();
+
+        var knownProperties = metadata.Properties
+            .Select(property => property.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var propertyName in valueLookup.Keys)
+        {
+            if (!knownProperties.Contains(propertyName))
+                throw new InvalidOperationException($"Field '{propertyName}' does not exist on object '{metadata.Name}'.");
+        }
+
+        var columns = new List<string>();
+        var parameters = new List<string>();
+        var sqlParameters = new List<SqliteParameter>();
+
+        foreach (var property in metadata.Properties)
+        {
+            if (!valueLookup.TryGetValue(property.Name, out var value))
+                continue;
+
+            var parameterName = $"@p{sqlParameters.Count}";
+            columns.Add(property.ColumnName);
+            parameters.Add(parameterName);
+            sqlParameters.Add(new SqliteParameter(parameterName, ConvertToSqliteValue(value) ?? DBNull.Value));
+        }
+
+        if (columns.Count == 0)
+            throw new InvalidOperationException($"No values were supplied for object '{metadata.Name}'.");
+
+        var sql = $"INSERT INTO {metadata.TableName} ({string.Join(", ", columns)}) VALUES ({string.Join(", ", parameters)})";
+        ExecuteNonQuery(sql, sqlParameters.ToArray());
     }
 
     /// <summary>
@@ -233,6 +283,18 @@ public class EntityStore
         "DateTime" => "TEXT",
         "Guid" => "TEXT",
         _ => "TEXT"
+    };
+
+    private static PropertyMetadata? GetPrimaryKeyProperty(IObjectMetadata metadata) =>
+        metadata.Properties.FirstOrDefault(property => property.IsPrimaryKey) ??
+        metadata.Properties.FirstOrDefault(property => property.Name == "Id");
+
+    private static object? ConvertToSqliteValue(object? value) => value switch
+    {
+        null => null,
+        Guid guidValue => guidValue.ToString(),
+        DateTime dateTimeValue => dateTimeValue.ToString("O"),
+        _ => value
     };
 
     public static void Reset() => _current = new EntityStore();
