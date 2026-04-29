@@ -17,19 +17,19 @@ internal static class WorkflowConditionEvaluator
             !string.Equals(operatorName, "isNotEmpty", StringComparison.OrdinalIgnoreCase);
         var right = requiresRight ? WorkflowValueResolver.ResolveOperand(GetRequiredProperty(condition, "right"), context) : null;
 
-        return operatorName switch
+        return operatorName.ToUpperInvariant() switch
         {
-            "equals" => AreEqual(left, right),
-            "notEquals" => !AreEqual(left, right),
-            "greaterThan" => Compare(left, right) > 0,
-            "greaterThanOrEqual" => Compare(left, right) >= 0,
-            "lessThan" => Compare(left, right) < 0,
-            "lessThanOrEqual" => Compare(left, right) <= 0,
-            "contains" => ToText(left).Contains(ToText(right), StringComparison.OrdinalIgnoreCase),
-            "startsWith" => ToText(left).StartsWith(ToText(right), StringComparison.OrdinalIgnoreCase),
-            "endsWith" => ToText(left).EndsWith(ToText(right), StringComparison.OrdinalIgnoreCase),
-            "isEmpty" => IsEmpty(left),
-            "isNotEmpty" => !IsEmpty(left),
+            "EQUALS" => AreEqual(left, right),
+            "NOTEQUALS" => !AreEqual(left, right),
+            "GREATERTHAN" => Compare(left, right) > 0,
+            "GREATERTHANOREQUAL" => Compare(left, right) >= 0,
+            "LESSTHAN" => Compare(left, right) < 0,
+            "LESSTHANOREQUAL" => Compare(left, right) <= 0,
+            "CONTAINS" => ToText(left).Contains(ToText(right), StringComparison.OrdinalIgnoreCase),
+            "STARTSWITH" => ToText(left).StartsWith(ToText(right), StringComparison.OrdinalIgnoreCase),
+            "ENDSWITH" => ToText(left).EndsWith(ToText(right), StringComparison.OrdinalIgnoreCase),
+            "ISEMPTY" => IsEmpty(left),
+            "ISNOTEMPTY" => !IsEmpty(left),
             _ => throw new InvalidOperationException($"Condition operator '{operatorName}' is not supported.")
         };
     }

@@ -1,0 +1,364 @@
+import { CheckCircle2, Power, PowerOff, Save, Workflow as WorkflowIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ApiError, workflowApi } from '../api/client';
+import type {
+  ObjectMetadata,
+  WorkflowDefinition,
+  WorkflowNodeType,
+  WorkflowRunDetail,
+  WorkflowRunSummary,
+  WorkflowTestRunResponse,
+  WorkflowValidationIssue,
+  WorkflowValidationResponse
+} from '../api/types';
+import { NodePalette } from './NodePalette';
+import { PropertyInspector } from './PropertyInspector';
+import { RunHistoryPanel } from './RunHistoryPanel';
+import { TestRunPanel } from './TestRunPanel';
+import { ValidationPanel } from './ValidationPanel';
+import { WorkflowCanvas } from './WorkflowCanvas';
+import { WorkflowList } from './WorkflowList';
+import { createNodeDraft, createWorkflowDraft } from './workflowModel';
+
+export function WorkflowEditor() {
+  const [metadataObjects, setMetadataObjects] = useState<ObjectMetadata[]>([]);
+  const [nodeTypes, setNodeTypes] = useState<WorkflowNodeType[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [savedWorkflowIds, setSavedWorkflowIds] = useState<Set<string>>(new Set());
+  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowDefinition | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [validationIssues, setValidationIssues] = useState<WorkflowValidationIssue[]>([]);
+  const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
+  const [selectedRun, setSelectedRun] = useState<WorkflowRunDetail | null>(null);
+  const [testResult, setTestResult] = useState<WorkflowTestRunResponse | null>(null);
+  const [notice, setNotice] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const selectedWorkflowIsSaved = useMemo(
+    () => Boolean(selectedWorkflow && savedWorkflowIds.has(selectedWorkflow.id)),
+    [savedWorkflowIds, selectedWorkflow]
+  );
+
+  useEffect(() => {
+    void loadInitialData();
+  }, []);
+
+  async function loadInitialData() {
+    setIsLoading(true);
+    try {
+      const [objects, catalog, savedWorkflows] = await Promise.all([
+        workflowApi.listObjects(),
+        workflowApi.listNodeTypes(),
+        workflowApi.listWorkflows()
+      ]);
+      setMetadataObjects(objects);
+      setNodeTypes(catalog);
+      setWorkflows(savedWorkflows);
+      setSavedWorkflowIds(new Set(savedWorkflows.map(workflow => workflow.id)));
+      if (!selectedWorkflow && savedWorkflows.length > 0) {
+        openWorkflow(savedWorkflows[0]);
+      }
+      setNotice('');
+    } catch (error) {
+      setNotice(getErrorMessage(error, 'Could not load editor data. Start the MetaRecord.Web API and refresh.'));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function reloadWorkflows(keepSelected?: WorkflowDefinition) {
+    const savedWorkflows = await workflowApi.listWorkflows();
+    setWorkflows(savedWorkflows);
+    setSavedWorkflowIds(new Set(savedWorkflows.map(workflow => workflow.id)));
+    if (keepSelected) {
+      setSelectedWorkflow(keepSelected);
+    }
+  }
+
+  function openWorkflow(workflow: WorkflowDefinition) {
+    setSelectedWorkflow(workflow);
+    setSelectedNodeId(workflow.nodes[0]?.id ?? null);
+    setValidationIssues([]);
+    setTestResult(null);
+    setSelectedRun(null);
+    void loadRuns(workflow.id);
+  }
+
+  function createWorkflow(name: string, objectName: string, eventName: WorkflowDefinition['eventName']) {
+    try {
+      const workflow = createWorkflowDraft(name, objectName, eventName, metadataObjects, nodeTypes);
+      setSelectedWorkflow(workflow);
+      setSelectedNodeId(workflow.nodes[0]?.id ?? null);
+      setValidationIssues([]);
+      setRuns([]);
+      setSelectedRun(null);
+      setTestResult(null);
+      setNotice('Draft created. Save it to persist and validate on the server.');
+    } catch (error) {
+      setNotice(getErrorMessage(error, 'Could not create workflow.'));
+    }
+  }
+
+  function addNode(nodeType: WorkflowNodeType) {
+    if (!selectedWorkflow)
+      return;
+
+    const node = createNodeDraft(nodeType, selectedWorkflow, metadataObjects);
+    setSelectedWorkflow({
+      ...selectedWorkflow,
+      nodes: [...selectedWorkflow.nodes, node]
+    });
+    setSelectedNodeId(node.id);
+    setNotice(`${nodeType.displayName} added.`);
+  }
+
+  async function saveSelectedWorkflow(): Promise<WorkflowDefinition | null> {
+    if (!selectedWorkflow)
+      return null;
+
+    return persistWorkflow(selectedWorkflow);
+  }
+
+  async function persistWorkflow(workflow: WorkflowDefinition): Promise<WorkflowDefinition | null> {
+    setIsSaving(true);
+    try {
+      const savedWorkflow = savedWorkflowIds.has(workflow.id)
+        ? await workflowApi.updateWorkflow(workflow)
+        : await workflowApi.createWorkflow(workflow);
+
+      setSelectedWorkflow(savedWorkflow);
+      setValidationIssues([]);
+      await reloadWorkflows(savedWorkflow);
+      setNotice('Workflow saved.');
+      return savedWorkflow;
+    } catch (error) {
+      const validation = getValidationDetails(error);
+      if (validation)
+        setValidationIssues(validation.issues);
+
+      setNotice(getErrorMessage(error, 'Workflow save failed.'));
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function validateSelectedWorkflow() {
+    const workflow = selectedWorkflowIsSaved ? selectedWorkflow : await saveSelectedWorkflow();
+    if (!workflow)
+      return;
+
+    try {
+      const validation = await workflowApi.validateWorkflow(workflow.id);
+      setValidationIssues(validation.issues);
+      setNotice(validation.isValid ? 'Workflow is valid.' : 'Validation found issues.');
+    } catch (error) {
+      setNotice(getErrorMessage(error, 'Validation failed.'));
+    }
+  }
+
+  async function enableSelectedWorkflow() {
+    const workflow = selectedWorkflowIsSaved ? selectedWorkflow : await saveSelectedWorkflow();
+    if (!workflow)
+      return;
+
+    try {
+      const enabled = await workflowApi.enableWorkflow(workflow.id);
+      setSelectedWorkflow(enabled);
+      await reloadWorkflows(enabled);
+      setNotice('Workflow enabled.');
+    } catch (error) {
+      const validation = getValidationDetails(error);
+      if (validation)
+        setValidationIssues(validation.issues);
+      setNotice(getErrorMessage(error, 'Enable failed.'));
+    }
+  }
+
+  async function disableSelectedWorkflow() {
+    if (!selectedWorkflow || !selectedWorkflowIsSaved)
+      return;
+
+    try {
+      const disabled = await workflowApi.disableWorkflow(selectedWorkflow.id);
+      setSelectedWorkflow(disabled);
+      await reloadWorkflows(disabled);
+      setNotice('Workflow disabled.');
+    } catch (error) {
+      setNotice(getErrorMessage(error, 'Disable failed.'));
+    }
+  }
+
+  async function runTest(currentRecord: Record<string, unknown>) {
+    const workflow = selectedWorkflowIsSaved ? selectedWorkflow : await saveSelectedWorkflow();
+    if (!workflow)
+      return;
+
+    setIsRunning(true);
+    try {
+      const result = await workflowApi.testRun(workflow.id, { currentRecord });
+      setTestResult(result);
+      await loadRuns(workflow.id);
+      setNotice(`Test run ${result.status.toLowerCase()}.`);
+    } catch (error) {
+      setNotice(getErrorMessage(error, 'Test run failed.'));
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  async function loadRuns(workflowId: string) {
+    try {
+      const nextRuns = await workflowApi.listRuns(workflowId);
+      setRuns(nextRuns);
+    } catch {
+      setRuns([]);
+    }
+  }
+
+  async function selectRun(runId: string) {
+    try {
+      setSelectedRun(await workflowApi.getRun(runId));
+    } catch (error) {
+      setNotice(getErrorMessage(error, 'Could not load run details.'));
+    }
+  }
+
+  return (
+    <main className="editor-shell">
+      <header className="editor-toolbar">
+        <div className="app-title">
+          <WorkflowIcon size={21} aria-hidden="true" />
+          <div>
+            <h1>Workflow Editor</h1>
+            <span>{isLoading ? 'Loading API data' : `${metadataObjects.length} objects · ${nodeTypes.length} node types`}</span>
+          </div>
+        </div>
+
+        {selectedWorkflow && (
+          <div className="workflow-toolbar-fields">
+            <input
+              value={selectedWorkflow.name}
+              onChange={event => setSelectedWorkflow({ ...selectedWorkflow, name: event.target.value })}
+              aria-label="Workflow name"
+            />
+            <span>{selectedWorkflow.objectName}</span>
+            <span>{selectedWorkflow.eventName}</span>
+            <span className={selectedWorkflow.isEnabled ? 'status-pill enabled' : 'status-pill disabled'}>
+              {selectedWorkflow.isEnabled ? 'Enabled' : selectedWorkflowIsSaved ? 'Disabled' : 'Draft'}
+            </span>
+          </div>
+        )}
+
+        <div className="toolbar-actions">
+          <button className="secondary-button" type="button" onClick={saveSelectedWorkflow} disabled={!selectedWorkflow || isSaving}>
+            <Save size={16} aria-hidden="true" />
+            Save
+          </button>
+          <button className="secondary-button" type="button" onClick={validateSelectedWorkflow} disabled={!selectedWorkflow || isSaving}>
+            <CheckCircle2 size={16} aria-hidden="true" />
+            Validate
+          </button>
+          <button className="secondary-button" type="button" onClick={enableSelectedWorkflow} disabled={!selectedWorkflow || isSaving}>
+            <Power size={16} aria-hidden="true" />
+            Enable
+          </button>
+          <button className="secondary-button" type="button" onClick={disableSelectedWorkflow} disabled={!selectedWorkflow || !selectedWorkflowIsSaved || isSaving}>
+            <PowerOff size={16} aria-hidden="true" />
+            Disable
+          </button>
+        </div>
+      </header>
+
+      {notice && <div className="notice-bar">{notice}</div>}
+
+      <div className="editor-layout">
+        <aside className="left-rail">
+          <WorkflowList
+            workflows={workflows}
+            metadataObjects={metadataObjects}
+            selectedWorkflowId={selectedWorkflow?.id}
+            onOpenWorkflow={openWorkflow}
+            onCreateWorkflow={createWorkflow}
+            onRefresh={loadInitialData}
+          />
+          <NodePalette workflow={selectedWorkflow} nodeTypes={nodeTypes} onAddNode={addNode} />
+        </aside>
+
+        <section className="canvas-column">
+          {selectedWorkflow ? (
+            <WorkflowCanvas
+              workflow={selectedWorkflow}
+              nodeTypes={nodeTypes}
+              validationIssues={validationIssues}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={setSelectedNodeId}
+              onWorkflowChange={setSelectedWorkflow}
+              onNotice={setNotice}
+            />
+          ) : (
+            <div className="empty-canvas">
+              <WorkflowIcon size={34} aria-hidden="true" />
+              <strong>No workflow selected</strong>
+              <span>Create or open a workflow from the left rail.</span>
+            </div>
+          )}
+        </section>
+
+        <aside className="right-rail">
+          <PropertyInspector
+            workflow={selectedWorkflow}
+            nodeTypes={nodeTypes}
+            metadataObjects={metadataObjects}
+            validationIssues={validationIssues}
+            selectedNodeId={selectedNodeId}
+            onWorkflowChange={setSelectedWorkflow}
+          />
+        </aside>
+      </div>
+
+      <footer className="bottom-rail">
+        <ValidationPanel issues={validationIssues} onSelectNode={setSelectedNodeId} />
+        <TestRunPanel
+          workflow={selectedWorkflow}
+          metadataObjects={metadataObjects}
+          testResult={testResult}
+          isRunning={isRunning}
+          onRun={runTest}
+        />
+        <RunHistoryPanel runs={runs} selectedRun={selectedRun} onSelectRun={selectRun} />
+      </footer>
+    </main>
+  );
+}
+
+function getValidationDetails(error: unknown): WorkflowValidationResponse | null {
+  if (!(error instanceof ApiError))
+    return null;
+
+  const details = error.details as Partial<WorkflowValidationResponse> | undefined;
+  if (!details || !Array.isArray(details.issues))
+    return null;
+
+  return {
+    isValid: Boolean(details.isValid),
+    issues: details.issues
+  };
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    const validation = getValidationDetails(error);
+    if (validation)
+      return validation.isValid ? fallback : `Validation blocked the request with ${validation.issues.length} issue(s).`;
+
+    return `${fallback} ${error.message}`;
+  }
+
+  if (error instanceof Error)
+    return `${fallback} ${error.message}`;
+
+  return fallback;
+}

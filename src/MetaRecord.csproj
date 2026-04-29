@@ -15,4 +15,8 @@
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="MetaRecord.Web\**\*.cs" />
+  </ItemGroup>
+
 </Project>

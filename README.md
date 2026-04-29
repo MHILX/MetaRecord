@@ -1,6 +1,6 @@
 # MetaRecord
 
-A demonstration of combining the **Active Record pattern** with a **metadata-driven object modeling system** in C#, featuring **database-backed metadata storage** using Entity Framework Core and SQLite.
+A demonstration of combining the **Active Record pattern** with a **metadata-driven object modeling system** in C#, featuring **database-backed metadata storage**, a **low-code workflow runtime**, an **ASP.NET Core workflow API**, and a **React visual workflow editor**.
 
 ## Overview
 
@@ -35,6 +35,20 @@ Console.WriteLine($"Table: {metadata.TableName}");
 foreach (var prop in metadata.Properties)
     Console.WriteLine($"  {prop.Name}: {prop.ClrType.Name}");
 ```
+
+### Low-Code Workflow Runtime
+
+MetaRecord now extends metadata from object shape to object behavior. Workflows are saved as graph definitions with predefined trigger, flow, and action nodes. They can be validated, enabled, executed from record lifecycle events, tested through the API, and inspected through run history.
+
+Supported MVP workflow events include:
+
+- `BeforeSave`
+- `Created`
+- `Updated`
+- `FieldChanged`
+- `Manual`
+
+The visual editor is intentionally powered by the same backend node catalog and validator that the runtime uses, so editor assumptions stay aligned with execution behavior.
 
 ## Concepts
 
@@ -79,22 +93,21 @@ Product.Save()
 
 ```
 MetaRecord/
-├── Program.cs                    # Demo application
-├── metarecord.db                 # SQLite database (created at runtime)
-├── Data/
-│   ├── MetaRecordDbContext.cs    # EF Core context for metadata
-│   ├── EntityStore.cs            # Metadata-driven entity persistence
-│   ├── ObjectDefinitionEntity.cs # DB entity for object metadata
-│   ├── PropertyDefinitionEntity.cs # DB entity for property metadata
-│   └── MetadataVersionEntity.cs  # Version tracking
-├── Models/
-│   ├── ActiveRecord.cs           # Base class for all entities
-│   ├── IObjectMetadata.cs        # Metadata contracts and types
-│   ├── MetadataRegistry.cs       # Central metadata repository
-│   └── Product.cs                # Example entity
-├── Services/
-│   ├── MetadataLoader.cs         # Startup initialization
-│   └── MetadataRepository.cs     # DB access for metadata
+├── docs/
+│   ├── Low-Code-Workflow-Editor-MVP.md
+│   └── Low-Code-Workflow-MVP-Implementation-Plan.md
+├── src/
+│   ├── MetaRecord.sln
+│   ├── MetaRecord.csproj                 # Console demo + core runtime for current MVP stage
+│   ├── Program.cs                        # Console proof for metadata + workflow runtime
+│   ├── Data/                             # EF metadata store + dynamic entity persistence
+│   ├── Models/                           # ActiveRecord, metadata contracts, Product sample
+│   ├── Services/                         # Metadata initialization/repository services
+│   ├── Workflows/                        # Definition, catalog, validation, runtime, persistence
+│   ├── MetaRecord.Web/                   # ASP.NET Core API for editor/runtime operations
+│   └── MetaRecord.Editor/                # React/TypeScript visual workflow editor
+├── tests/
+│   └── MetaRecord.Core.Tests/            # xUnit tests for runtime, lifecycle, API, helpers
 └── README.md
 ```
 
@@ -139,6 +152,12 @@ MetaRecord/
 | `MetadataRepository` | Loads/saves metadata from SQLite database |
 | `MetadataLoader` | Initializes metadata system at startup |
 | `EntityStore` | Metadata-driven SQL generation for entity persistence |
+| `WorkflowNodeCatalog` | Code-defined trigger, flow, and action node catalog |
+| `WorkflowValidator` | Server-side validation for graph shape, metadata references, ports, timing, and config |
+| `WorkflowEngine` | Executes validated workflow graphs and records run history |
+| `WorkflowRepository` | Persists workflow definitions, runs, and step details |
+| `MetaRecord.Web` | Minimal API host for metadata, workflows, validation, test-run, and run history |
+| `MetaRecord.Editor` | React Flow visual editor for authoring and testing workflows |
 
 ## Database Schema
 
@@ -170,26 +189,84 @@ CREATE TABLE Products (
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
+- [Node.js](https://nodejs.org/) 20 LTS or later for the React workflow editor
 
-## How to Run
+## Quick Start
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd MetaRecord
-   ```
+Run commands from the repository root unless a command says otherwise.
 
-2. **Build the project**
-   ```bash
-   dotnet build
-   ```
+### Restore Dependencies
 
-3. **Run the demo**
-   ```bash
-   dotnet run
-   ```
+```powershell
+dotnet restore src/MetaRecord.sln
+npm --prefix src/MetaRecord.Editor install
+```
 
-The first run creates `metarecord.db` and seeds metadata. Subsequent runs load from the database.
+### Build and Test Everything
+
+```powershell
+dotnet test src/MetaRecord.sln
+npm --prefix src/MetaRecord.Editor run build
+```
+
+### Run the Console Proof
+
+```powershell
+dotnet run --project src/MetaRecord.csproj
+```
+
+The console demo initializes metadata, seeds sample workflows, saves valid and invalid products, and prints workflow run results.
+
+### Run the Low-Code Workflow MVP
+
+Start the API in one terminal:
+
+```powershell
+dotnet run --project src/MetaRecord.Web/MetaRecord.Web.csproj --urls http://localhost:5000
+```
+
+If this fails with `address already in use`, another API process is already listening on port `5000`. You can either use the already-running API, stop that terminal, or run the API on another port:
+
+```powershell
+dotnet run --project src/MetaRecord.Web/MetaRecord.Web.csproj --urls http://localhost:5050
+```
+
+Start the visual editor in a second terminal:
+
+```powershell
+npm --prefix src/MetaRecord.Editor run dev
+```
+
+Open the editor at:
+
+```text
+http://localhost:5173/
+```
+
+The editor dev server proxies `/api` calls to `http://localhost:5000` by default. If you run the API on a different URL, set `VITE_API_PROXY_TARGET` before starting the editor:
+
+```powershell
+$env:VITE_API_PROXY_TARGET = "http://localhost:5050"
+npm --prefix src/MetaRecord.Editor run dev
+```
+
+### Useful Commands
+
+```powershell
+# Backend build only
+dotnet build src/MetaRecord.sln
+
+# Backend tests only
+dotnet test src/MetaRecord.sln
+
+# Editor production build only
+npm --prefix src/MetaRecord.Editor run build
+
+# Editor preview after a production build
+npm --prefix src/MetaRecord.Editor run preview
+```
+
+The first API or console run creates a local SQLite `metarecord.db` and seeds metadata. Runtime database files are ignored by git.
 
 ## Expected Output
 
@@ -203,31 +280,32 @@ The first run creates `metarecord.db` and seeds metadata. Subsequent runs load f
   [META] Loaded 1 object definitions (version 1)
   [DATA] Entity tables initialized
 
-1. ACTIVE RECORD PATTERN
-   Creating and saving a product...
-  [DB] Inserted Product with Id=...
-   Created: Widget @ $9.99
+1. SEED WORKFLOW DEFINITIONS
+   Enabled: Reject invalid product price (BeforeSave)
+   Enabled: Write log when product is created (Created)
+   Enabled: Write log when quantity is low (FieldChanged)
 
-2. METADATA-DRIVEN OBJECT MODEL
-   Querying object metadata at runtime...
+2. VALID SAVE: BeforeSave + Created
+   Saved: Widget-... @ $9.99 quantity 100
+   BeforeSave validation: Succeeded (... steps)
+   Created log: Succeeded (... steps)
 
+3. INVALID SAVE: BeforeSave rejection
+   Rejected: Price must be greater than zero for Invalid-...
+   Product persisted: False
+
+4. UPDATE SAVE: FieldChanged
+   Updated quantity: 5
+   Quantity low log: Succeeded (... steps)
+
+5. METADATA-DRIVEN OBJECT MODEL
    Object: Product
    Table:  Products
-   Properties:
-     - Id (Guid) [Required]
-     - Name (String) [Required]
-     - Price (Decimal) [Required]
-     - Quantity (Int32)
 
-3. FIND AND UPDATE
-   Found product: Widget @ $9.99
-  [DB] Updated Product with Id=...
-   Updated price: $12.99
+6. QUERY ALL (from SQLite)
+   Total products in database: ...
 
-4. QUERY ALL (from SQLite)
-   Total products in database: 1   <- Increases each run!
-
-5. ALL REGISTERED METADATA (from database)
+7. ALL REGISTERED METADATA (from database)
    - Product -> Products (4 properties)
 
 === Demo Complete ===

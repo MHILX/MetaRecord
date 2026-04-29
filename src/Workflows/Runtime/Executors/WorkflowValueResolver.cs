@@ -80,13 +80,13 @@ internal static partial class WorkflowValueResolver
             throw new InvalidOperationException("Condition operand must be an object.");
 
         var source = GetRequiredString(operand, "source", "Condition operand source is required.");
-        return source switch
+        return source.ToUpperInvariant() switch
         {
-            "currentRecord" => ResolveDictionaryField(context.CurrentRecord, GetRequiredString(operand, "field", "currentRecord operand field is required."), "currentRecord"),
-            "originalRecord" => ResolveDictionaryField(context.OriginalRecord, GetRequiredString(operand, "field", "originalRecord operand field is required."), "originalRecord"),
-            "event" => ResolveEventField(context, GetRequiredString(operand, "field", "event operand field is required.")),
-            "literal" => TryGetProperty(operand, "value", out var literalValue) ? ResolveConfiguredValue(literalValue, context) : null,
-            "variable" => ResolveDictionaryField(context.Variables, GetRequiredString(operand, "name", "Variable operand name is required."), "variable"),
+            "CURRENTRECORD" => ResolveDictionaryField(context.CurrentRecord, GetRequiredString(operand, "field", "currentRecord operand field is required."), "currentRecord"),
+            "ORIGINALRECORD" => ResolveDictionaryField(context.OriginalRecord, GetRequiredString(operand, "field", "originalRecord operand field is required."), "originalRecord"),
+            "EVENT" => ResolveEventField(context, GetRequiredString(operand, "field", "event operand field is required.")),
+            "LITERAL" => TryGetProperty(operand, "value", out var literalValue) ? ResolveConfiguredValue(literalValue, context) : null,
+            "VARIABLE" => ResolveDictionaryField(context.Variables, GetRequiredString(operand, "name", "Variable operand name is required."), "variable"),
             _ => throw new InvalidOperationException($"Operand source '{source}' is not supported.")
         };
     }

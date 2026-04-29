@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetaRecord", "MetaRecord.cs
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetaRecord.Core.Tests", "..\tests\MetaRecord.Core.Tests\MetaRecord.Core.Tests.csproj", "{4E610355-D6BC-4BEF-B7E5-0205A9325A26}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetaRecord.Web", "MetaRecord.Web\MetaRecord.Web.csproj", "{01F66CA9-3D77-4F13-A4DF-20094749DD55}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,18 @@ Global
 		{4E610355-D6BC-4BEF-B7E5-0205A9325A26}.Release|x64.Build.0 = Release|Any CPU
 		{4E610355-D6BC-4BEF-B7E5-0205A9325A26}.Release|x86.ActiveCfg = Release|Any CPU
 		{4E610355-D6BC-4BEF-B7E5-0205A9325A26}.Release|x86.Build.0 = Release|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Debug|x64.Build.0 = Debug|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Debug|x86.Build.0 = Debug|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Release|Any CPU.Build.0 = Release|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Release|x64.ActiveCfg = Release|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Release|x64.Build.0 = Release|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Release|x86.ActiveCfg = Release|Any CPU
+		{01F66CA9-3D77-4F13-A4DF-20094749DD55}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -60,8 +60,9 @@ Key existing pieces to reuse:
 | 7. Lifecycle dispatch | Saves trigger workflows. | `SaveAsync()`, before-save, created, updated, field-changed. |
 | 8. Console proof | MVP behavior visible without a web UI. | Seed demo workflows and print run results. |
 | 9. Tests | Runtime contract is protected. | Validator and engine unit tests. |
-| 10. Web/API | Editor has backend endpoints. | ASP.NET Core host after runtime proof. |
-| 11. Visual editor | Users can author workflows visually. | React Flow editor after API exists. |
+| 10. Test hardening | Runtime contract is protected. | Focused validator, engine, executor, lifecycle, and helper tests. |
+| 11. Web API | Editor has backend endpoints. | ASP.NET Core host after runtime proof. |
+| 12. Visual editor | Users can author workflows visually. | React Flow editor after API exists. |
 
 ## Milestone 0: Repo Hygiene
 
@@ -452,31 +453,57 @@ Start this after the API exposes real workflow definitions and validation.
 ```text
 src/MetaRecord.Editor/
   package.json
+  index.html
+  vite.config.ts
   src/
     api/
+      client.ts
+      types.ts
+    components/
     workflow/
+      WorkflowEditor.tsx
+      WorkflowList.tsx
       WorkflowCanvas.tsx
       NodePalette.tsx
       PropertyInspector.tsx
       ValidationPanel.tsx
       RunHistoryPanel.tsx
+      TestRunPanel.tsx
 ```
 
 ### Tasks
 
+- Create a Vite React/TypeScript app under `src/MetaRecord.Editor`.
 - Use React Flow for canvas editing.
 - Load node types from `/api/workflow-node-types`.
 - Render configuration forms from node config schemas.
 - Load metadata object and property pickers from the API.
+- Provide a workflow list with create/open actions.
+- Create new workflows with a selected object and trigger event.
+- Add nodes from the palette and connect them on the canvas.
+- Edit node labels and config through a property inspector.
 - Save, validate, enable, disable, and test-run from the editor.
 - Highlight validation issues by node id and config field path.
+- Show recent runs and step-level output for the selected workflow.
+
+### First Implementation Slice
+
+- Load metadata objects, node catalog, and saved workflows from the Web API.
+- Render a three-pane editor: workflow list, canvas/palette, and inspector.
+- Support creating a workflow with one trigger node already placed.
+- Support adding predefined non-trigger nodes and wiring compatible ports.
+- Render schema-driven controls for common field kinds: text, template, object, property, condition, and field mappings.
+- Save, validate, enable, disable, and test-run through the Web API.
+- Show validation issues, run summaries, and selected run step details.
 
 ### Acceptance Criteria
 
 - A user can create a workflow without editing JSON.
+- A user can save, validate, enable, disable, and test-run from the editor.
 - Incompatible edges are rejected or shown as invalid.
 - Validation errors map back to the relevant node and inspector field.
 - Run history is visible for enabled workflows.
+- `npm run build` succeeds for the editor app.
 
 ## First Implementation Slice
 
