@@ -219,6 +219,14 @@ The console demo initializes metadata, seeds sample workflows, saves valid and i
 
 ### Run the Low-Code Workflow MVP
 
+Use the helper script for a one-command launch on Windows:
+
+```powershell
+.\Start-MetaRecordMvp.ps1
+```
+
+It starts the API in one PowerShell window and the visual editor in another, then opens the editor automatically. The API uses `http://127.0.0.1:5050` when available and falls back to the next free port if needed; the editor does the same for `5173`. Pass `-ApiPort 5000` if you want the original API port.
+
 Start the API in one terminal:
 
 ```powershell
