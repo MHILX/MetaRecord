@@ -22,10 +22,10 @@ public static class MetadataLoader
 
         var repository = new MetadataRepository(context);
 
-        // Seed initial data if provided and DB is empty
+        // Seed any missing demo metadata before loading the registry
         if (seedData != null)
         {
-            await repository.SeedIfEmptyAsync(seedData);
+            await repository.SeedMissingAsync(seedData);
         }
 
         // Load all metadata from database

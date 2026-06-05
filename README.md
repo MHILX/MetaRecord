@@ -227,6 +227,10 @@ Use the helper script for a one-command launch on Windows:
 
 It starts the API in one PowerShell window and the visual editor in another, then opens the editor automatically. The API uses `http://127.0.0.1:5050` when available and falls back to the next free port if needed; the editor does the same for `5173`. Pass `-ApiPort 5000` if you want the original API port.
 
+On startup, the web host seeds the demo metadata plus four demo workflows, so the editor opens with a complete sample workflow set instead of an empty canvas. The default editor selection is the richer "Capture product audit snapshot" workflow.
+
+For a guided first-time tour of that workflow and every editor panel, see [Capture Product Audit Snapshot Workflow](docs/Capture-Product-Audit-Snapshot-Workflow.md).
+
 Start the API in one terminal:
 
 ```powershell
@@ -284,11 +288,12 @@ The first API or console run creates a local SQLite `metarecord.db` and seeds me
 0. METADATA INITIALIZATION (from SQLite)
   [META] Initializing metadata system...
   [META] Database: C:\...\MetaRecord\metarecord.db
-  [META] Seeded 1 object definitions to database   <- First run only
-  [META] Loaded 1 object definitions (version 1)
+   [META] Seeded 2 object definitions to database   <- First run only
+   [META] Loaded 2 object definitions (version 2)
   [DATA] Entity tables initialized
 
 1. SEED WORKFLOW DEFINITIONS
+    Enabled: Capture product audit snapshot (Manual)
    Enabled: Reject invalid product price (BeforeSave)
    Enabled: Write log when product is created (Created)
    Enabled: Write log when quantity is low (FieldChanged)

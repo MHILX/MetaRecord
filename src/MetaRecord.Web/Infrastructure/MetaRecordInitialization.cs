@@ -1,6 +1,8 @@
 using MetaRecord.Data;
 using MetaRecord.Models;
 using MetaRecord.Services;
+using MetaRecord.Workflows;
+using MetaRecord.Workflows.Persistence;
 
 namespace MetaRecord.Web.Infrastructure;
 
@@ -13,24 +15,11 @@ internal static class MetaRecordInitialization
         var entityStore = scope.ServiceProvider.GetRequiredService<EntityStore>();
 
         MetadataRegistry.Clear();
-        await MetadataLoader.InitializeAsync(context, CreateSeedData());
+        await MetadataLoader.InitializeAsync(context, DemoMetadataSeeder.CreateDemoMetadata());
+        var workflowRepository = scope.ServiceProvider.GetRequiredService<WorkflowRepository>();
+        await DemoWorkflowSeeder.SeedAsync(workflowRepository);
         MetadataRegistry.LinkType<Product>("Product");
-        entityStore.EnsureTableExists(Product.Metadata);
+        foreach (var metadata in MetadataRegistry.GetAll())
+            entityStore.EnsureTableExists(metadata);
     }
-
-    private static IEnumerable<IObjectMetadata> CreateSeedData() => new[]
-    {
-        new ObjectMetadata
-        {
-            Name = "Product",
-            TableName = "Products",
-            Properties = new[]
-            {
-                new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
-                new PropertyMetadata("Name", "Name", typeof(string), true),
-                new PropertyMetadata("Price", "Price", typeof(decimal), true),
-                new PropertyMetadata("Quantity", "Quantity", typeof(int), false)
-            }
-        }
-    };
 }

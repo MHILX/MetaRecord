@@ -95,6 +95,26 @@ public class MetadataRepository
     }
 
     /// <summary>
+    /// Seeds any missing metadata rows by name.
+    /// </summary>
+    public async Task SeedMissingAsync(IEnumerable<IObjectMetadata> seedData)
+    {
+        var insertedCount = 0;
+
+        foreach (var metadata in seedData)
+        {
+            if (await GetByNameAsync(metadata.Name) is not null)
+                continue;
+
+            await SaveAsync(metadata);
+            insertedCount++;
+        }
+
+        if (insertedCount > 0)
+            Console.WriteLine($"  [META] Seeded {insertedCount} missing object definition(s) to database");
+    }
+
+    /// <summary>
     /// Gets the current metadata version.
     /// </summary>
     public async Task<int> GetVersionAsync()

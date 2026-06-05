@@ -2,6 +2,7 @@ using System.Text.Json;
 using MetaRecord.Data;
 using MetaRecord.Models;
 using MetaRecord.Services;
+using MetaRecord.Workflows;
 using MetaRecord.Workflows.Definitions;
 using MetaRecord.Workflows.Persistence;
 using MetaRecord.Workflows.Runtime;
@@ -27,7 +28,7 @@ async Task RunDemoAsync()
     WorkflowRuntime.Configure(store, repository);
 
     Console.WriteLine("1. SEED WORKFLOW DEFINITIONS");
-    var demoWorkflows = await SeedDemoWorkflowsAsync(repository);
+    var demoWorkflows = await DemoWorkflowSeeder.SeedAsync(repository);
     foreach (var workflow in demoWorkflows)
         Console.WriteLine($"   Enabled: {workflow.Name} ({workflow.EventName})");
     Console.WriteLine();
@@ -89,148 +90,15 @@ async Task RunDemoAsync()
 // ============================================================
 async Task InitializeMetadataAsync(MetaRecordDbContext metaContext)
 {
-    var seedData = new[]
-    {
-        new ObjectMetadata
-        {
-            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            Name = "Product",
-            TableName = "Products",
-            Properties = new[]
-            {
-                new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
-                new PropertyMetadata("Name", "Name", typeof(string), true) { MaxLength = 100, IsUnique = true, Caption = "Product Name" },
-                new PropertyMetadata("Price", "Price", typeof(decimal), true) { Caption = "Unit Price" },
-                new PropertyMetadata("Quantity", "Quantity", typeof(int), false) { DefaultValue = "0" }
-            }
-        }
-    };
-
-    await MetadataLoader.InitializeAsync(metaContext, seedData);
+    await MetadataLoader.InitializeAsync(metaContext, DemoMetadataSeeder.CreateDemoMetadata());
 
     MetadataRegistry.LinkType<Product>("Product");
 
     var store = EntityStore.Current;
-    store.EnsureTableExists(Product.Metadata);
+    foreach (var metadata in MetadataRegistry.GetAll())
+        store.EnsureTableExists(metadata);
     Console.WriteLine($"  [DATA] Entity tables initialized");
 }
-
-async Task<IReadOnlyList<WorkflowDefinition>> SeedDemoWorkflowsAsync(WorkflowRepository repository)
-{
-    var workflows = new[]
-    {
-        CreateRejectInvalidPriceWorkflow(),
-        CreateCreatedLogWorkflow(),
-        CreateLowQuantityChangedWorkflow()
-    };
-
-    foreach (var workflow in workflows)
-        await repository.SaveDefinitionAsync(workflow);
-
-    return workflows;
-}
-
-WorkflowDefinition CreateRejectInvalidPriceWorkflow() => new()
-{
-    Id = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"),
-    Name = "Reject invalid product price",
-    ObjectName = "Product",
-    EventName = WorkflowEventName.BeforeSave,
-    IsEnabled = true,
-    Nodes = new[]
-    {
-        Node("trigger-1", "trigger.before-save", "{}"),
-        ConditionNode("condition-1", "Price", "lessThanOrEqual", "0"),
-        Node("reject-1", "action.reject-save", """
-        {
-          "message": "Price must be greater than zero for {{currentRecord.Name}}."
-        }
-        """)
-    },
-    Edges = new[]
-    {
-        Edge("edge-1", "trigger-1", "success", "condition-1", "input"),
-        Edge("edge-2", "condition-1", "true", "reject-1", "input")
-    }
-};
-
-WorkflowDefinition CreateCreatedLogWorkflow() => new()
-{
-    Id = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"),
-    Name = "Write log when product is created",
-    ObjectName = "Product",
-    EventName = WorkflowEventName.Created,
-    IsEnabled = true,
-    Nodes = new[]
-    {
-        Node("trigger-1", "trigger.record-created", "{}"),
-        WriteLogNode("log-1", "Created {{currentRecord.Name}} at price {{currentRecord.Price}}.")
-    },
-    Edges = new[]
-    {
-        Edge("edge-1", "trigger-1", "success", "log-1", "input")
-    }
-};
-
-WorkflowDefinition CreateLowQuantityChangedWorkflow() => new()
-{
-    Id = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000003"),
-    Name = "Write log when quantity is low",
-    ObjectName = "Product",
-    EventName = WorkflowEventName.FieldChanged,
-    IsEnabled = true,
-    Nodes = new[]
-    {
-        Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Quantity\" }"),
-        ConditionNode("condition-1", "Quantity", "lessThan", "10"),
-        WriteLogNode("log-1", "Low quantity for {{currentRecord.Name}}: {{currentRecord.Quantity}} remaining.")
-    },
-    Edges = new[]
-    {
-        Edge("edge-1", "trigger-1", "success", "condition-1", "input"),
-        Edge("edge-2", "condition-1", "true", "log-1", "input")
-    }
-};
-
-WorkflowNode ConditionNode(string id, string fieldName, string operatorName, string literalValue) => Node(id, "flow.condition", $$"""
-{
-  "condition": {
-    "left": { "source": "currentRecord", "field": "{{fieldName}}" },
-    "operator": "{{operatorName}}",
-    "right": { "source": "literal", "value": {{literalValue}} }
-  }
-}
-""");
-
-WorkflowNode WriteLogNode(string id, string message) => Node(id, "action.write-log", $$"""
-{
-  "severity": "Information",
-  "message": "{{message}}"
-}
-""");
-
-WorkflowNode Node(string id, string type, string configJson) => new()
-{
-    Id = id,
-    Type = type,
-    Config = Json(configJson)
-};
-
-WorkflowEdge Edge(
-    string id,
-    string fromNodeId,
-    string fromPort,
-    string toNodeId,
-    string toPort) => new()
-{
-    Id = id,
-    FromNodeId = fromNodeId,
-    FromPort = fromPort,
-    ToNodeId = toNodeId,
-    ToPort = toPort
-};
-
-JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
 async Task PrintLatestRunAsync(MetaRecordDbContext context, string eventName, string label)
 {

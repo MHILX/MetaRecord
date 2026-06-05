@@ -20,7 +20,15 @@ import { WorkflowCanvas } from './WorkflowCanvas';
 import { WorkflowList } from './WorkflowList';
 import { createNodeDraft, createWorkflowDraft } from './workflowModel';
 
+type NoticeKind = 'info' | 'error';
+
+type NoticeState = {
+  message: string;
+  kind: NoticeKind;
+};
+
 export function WorkflowEditor() {
+  const preferredDemoWorkflowName = 'Capture product audit snapshot';
   const [metadataObjects, setMetadataObjects] = useState<ObjectMetadata[]>([]);
   const [nodeTypes, setNodeTypes] = useState<WorkflowNodeType[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
@@ -31,7 +39,7 @@ export function WorkflowEditor() {
   const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
   const [selectedRun, setSelectedRun] = useState<WorkflowRunDetail | null>(null);
   const [testResult, setTestResult] = useState<WorkflowTestRunResponse | null>(null);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState<NoticeState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -44,6 +52,18 @@ export function WorkflowEditor() {
   useEffect(() => {
     void loadInitialData();
   }, []);
+
+  useEffect(() => {
+    if (!notice || notice.kind === 'error')
+      return;
+
+    const timeoutId = window.setTimeout(() => setNotice(null), 2500);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
+
+  function showNotice(message: string, kind: NoticeKind = 'info') {
+    setNotice({ message, kind });
+  }
 
   async function loadInitialData() {
     setIsLoading(true);
@@ -58,11 +78,12 @@ export function WorkflowEditor() {
       setWorkflows(savedWorkflows);
       setSavedWorkflowIds(new Set(savedWorkflows.map(workflow => workflow.id)));
       if (!selectedWorkflow && savedWorkflows.length > 0) {
-        openWorkflow(savedWorkflows[0]);
+        const preferredWorkflow = savedWorkflows.find(workflow => workflow.name === preferredDemoWorkflowName) ?? savedWorkflows[0];
+        openWorkflow(preferredWorkflow);
       }
-      setNotice('');
+      setNotice(null);
     } catch (error) {
-      setNotice(getErrorMessage(error, 'Could not load editor data. Start the MetaRecord.Web API and refresh.'));
+      showNotice(getErrorMessage(error, 'Could not load editor data. Start the MetaRecord.Web API and refresh.'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -95,9 +116,9 @@ export function WorkflowEditor() {
       setRuns([]);
       setSelectedRun(null);
       setTestResult(null);
-      setNotice('Draft created. Save it to persist and validate on the server.');
+      showNotice('Draft created. Save it to persist and validate on the server.');
     } catch (error) {
-      setNotice(getErrorMessage(error, 'Could not create workflow.'));
+      showNotice(getErrorMessage(error, 'Could not create workflow.'), 'error');
     }
   }
 
@@ -111,7 +132,7 @@ export function WorkflowEditor() {
       nodes: [...selectedWorkflow.nodes, node]
     });
     setSelectedNodeId(node.id);
-    setNotice(`${nodeType.displayName} added.`);
+    showNotice(`${nodeType.displayName} added.`);
   }
 
   async function saveSelectedWorkflow(): Promise<WorkflowDefinition | null> {
@@ -131,14 +152,14 @@ export function WorkflowEditor() {
       setSelectedWorkflow(savedWorkflow);
       setValidationIssues([]);
       await reloadWorkflows(savedWorkflow);
-      setNotice('Workflow saved.');
+      showNotice('Workflow saved.');
       return savedWorkflow;
     } catch (error) {
       const validation = getValidationDetails(error);
       if (validation)
         setValidationIssues(validation.issues);
 
-      setNotice(getErrorMessage(error, 'Workflow save failed.'));
+      showNotice(getErrorMessage(error, 'Workflow save failed.'), 'error');
       return null;
     } finally {
       setIsSaving(false);
@@ -153,9 +174,9 @@ export function WorkflowEditor() {
     try {
       const validation = await workflowApi.validateWorkflow(workflow.id);
       setValidationIssues(validation.issues);
-      setNotice(validation.isValid ? 'Workflow is valid.' : 'Validation found issues.');
+      showNotice(validation.isValid ? 'Workflow is valid.' : 'Validation found issues.');
     } catch (error) {
-      setNotice(getErrorMessage(error, 'Validation failed.'));
+      showNotice(getErrorMessage(error, 'Validation failed.'), 'error');
     }
   }
 
@@ -168,12 +189,12 @@ export function WorkflowEditor() {
       const enabled = await workflowApi.enableWorkflow(workflow.id);
       setSelectedWorkflow(enabled);
       await reloadWorkflows(enabled);
-      setNotice('Workflow enabled.');
+      showNotice('Workflow enabled.');
     } catch (error) {
       const validation = getValidationDetails(error);
       if (validation)
         setValidationIssues(validation.issues);
-      setNotice(getErrorMessage(error, 'Enable failed.'));
+      showNotice(getErrorMessage(error, 'Enable failed.'), 'error');
     }
   }
 
@@ -185,9 +206,9 @@ export function WorkflowEditor() {
       const disabled = await workflowApi.disableWorkflow(selectedWorkflow.id);
       setSelectedWorkflow(disabled);
       await reloadWorkflows(disabled);
-      setNotice('Workflow disabled.');
+      showNotice('Workflow disabled.');
     } catch (error) {
-      setNotice(getErrorMessage(error, 'Disable failed.'));
+      showNotice(getErrorMessage(error, 'Disable failed.'), 'error');
     }
   }
 
@@ -201,9 +222,9 @@ export function WorkflowEditor() {
       const result = await workflowApi.testRun(workflow.id, { currentRecord });
       setTestResult(result);
       await loadRuns(workflow.id);
-      setNotice(`Test run ${result.status.toLowerCase()}.`);
+      showNotice(`Test run ${result.status.toLowerCase()}.`);
     } catch (error) {
-      setNotice(getErrorMessage(error, 'Test run failed.'));
+      showNotice(getErrorMessage(error, 'Test run failed.'), 'error');
     } finally {
       setIsRunning(false);
     }
@@ -222,7 +243,7 @@ export function WorkflowEditor() {
     try {
       setSelectedRun(await workflowApi.getRun(runId));
     } catch (error) {
-      setNotice(getErrorMessage(error, 'Could not load run details.'));
+      showNotice(getErrorMessage(error, 'Could not load run details.'), 'error');
     }
   }
 
@@ -272,7 +293,7 @@ export function WorkflowEditor() {
         </div>
       </header>
 
-      {notice && <div className="notice-bar">{notice}</div>}
+      {notice && <div className="notice-bar">{notice.message}</div>}
 
       <div className="editor-layout">
         <aside className="left-rail">
@@ -296,7 +317,7 @@ export function WorkflowEditor() {
               selectedNodeId={selectedNodeId}
               onSelectNode={setSelectedNodeId}
               onWorkflowChange={setSelectedWorkflow}
-              onNotice={setNotice}
+              onNotice={showNotice}
             />
           ) : (
             <div className="empty-canvas">

@@ -33,6 +33,60 @@ public sealed class WorkflowApiTests
     }
 
     [Fact]
+    public async Task Startup_seeds_demo_metadata_and_workflows_for_the_editor()
+    {
+        using var factory = new MetaRecordWebApiFactory();
+        var client = factory.CreateClient();
+
+        var metadataObjects = await client.GetFromJsonAsync<ObjectMetadataResponse[]>("/api/metadata/objects", JsonOptions);
+        var workflows = await client.GetFromJsonAsync<WorkflowDefinition[]>("/api/workflows", JsonOptions);
+
+        Assert.NotNull(metadataObjects);
+        Assert.Equal(2, metadataObjects.Length);
+        Assert.Contains(metadataObjects, metadata => metadata.Name == "WorkflowAuditEntry");
+
+        Assert.NotNull(workflows);
+        Assert.Equal(4, workflows.Length);
+        Assert.Contains(workflows, workflow => workflow.Name == "Capture product audit snapshot" && workflow.EventName == WorkflowEventName.Manual);
+        Assert.Contains(workflows, workflow => workflow.Name == "Reject invalid product price" && workflow.EventName == WorkflowEventName.BeforeSave);
+        Assert.Contains(workflows, workflow => workflow.Name == "Write log when product is created" && workflow.EventName == WorkflowEventName.Created);
+        Assert.Contains(workflows, workflow => workflow.Name == "Write log when quantity is low" && workflow.EventName == WorkflowEventName.FieldChanged);
+    }
+
+    [Fact]
+    public async Task Hero_workflow_executes_audit_snapshot_flow()
+    {
+        using var factory = new MetaRecordWebApiFactory();
+        var client = factory.CreateClient();
+
+        var workflows = await client.GetFromJsonAsync<WorkflowDefinition[]>("/api/workflows", JsonOptions);
+        var workflow = Assert.Single(workflows!.Where(workflow => workflow.Name == "Capture product audit snapshot"));
+
+        var runResponse = await client.PostAsJsonAsync($"/api/workflows/{workflow.Id}/test-run", new
+        {
+            currentRecord = new
+            {
+                id = Guid.NewGuid(),
+                name = "Widget",
+                price = 9.99m,
+                quantity = 5
+            }
+        });
+        var run = await runResponse.Content.ReadFromJsonAsync<WorkflowTestRunResponse>(JsonOptions);
+
+        runResponse.EnsureSuccessStatusCode();
+        Assert.NotNull(run);
+        Assert.Equal(WorkflowRunStatus.Succeeded, run.Status);
+        Assert.Contains(run.Steps, step => step.NodeType == "action.create-record");
+        Assert.Contains(run.Steps, step => step.NodeType == "action.write-log");
+        Assert.Contains(run.Steps, step => step.NodeType == "flow.stop");
+
+        var history = await client.GetFromJsonAsync<WorkflowRunSummaryResponse[]>($"/api/workflows/{workflow.Id}/runs", JsonOptions);
+        Assert.NotNull(history);
+        Assert.Single(history);
+    }
+
+    [Fact]
     public async Task Create_workflow_rejects_invalid_definition()
     {
         using var factory = new MetaRecordWebApiFactory();
