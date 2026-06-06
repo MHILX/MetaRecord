@@ -1,4 +1,6 @@
 import type {
+  MetadataValidationResponse,
+  ObjectMetadataUpsertRequest,
   ObjectMetadata,
   WorkflowDefinition,
   WorkflowNodeType,
@@ -51,6 +53,22 @@ export class ApiError extends Error {
 export const workflowApi = {
   listObjects: () => request<ObjectMetadata[]>('/api/metadata/objects'),
   getObject: (name: string) => request<ObjectMetadata>(`/api/metadata/objects/${encodeURIComponent(name)}`),
+  getObjectById: (id: string) => request<ObjectMetadata>(`/api/metadata/objects/${id}`),
+  validateObject: (requestBody: ObjectMetadataUpsertRequest) => request<MetadataValidationResponse>('/api/metadata/objects/validate', {
+    method: 'POST',
+    body: JSON.stringify(requestBody)
+  }),
+  createObject: (requestBody: ObjectMetadataUpsertRequest) => request<ObjectMetadata>('/api/metadata/objects', {
+    method: 'POST',
+    body: JSON.stringify(requestBody)
+  }),
+  updateObject: (id: string, requestBody: ObjectMetadataUpsertRequest) => request<ObjectMetadata>(`/api/metadata/objects/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(requestBody)
+  }),
+  deleteObject: (id: string) => request<void>(`/api/metadata/objects/${id}`, {
+    method: 'DELETE'
+  }),
   listNodeTypes: () => request<WorkflowNodeType[]>('/api/workflow-node-types'),
   listWorkflows: () => request<WorkflowDefinition[]>('/api/workflows'),
   getWorkflow: (id: string) => request<WorkflowDefinition>(`/api/workflows/${id}`),

@@ -13,7 +13,7 @@ Both patterns answer the same question — *"where does the code that moves data
 |---|---|---|
 | Where is persistence code? | On the entity | In a separate class |
 | What does the entity know? | Its data *and* how to save itself | Only its data (POCO) |
-| Typical call site | `product.Save()` | `repo.Add(product); uow.SaveChanges();` |
+| Typical call site | `todo.Save()` | `repo.Add(todo); uow.SaveChanges();` |
 | Coupling of domain to DB | Tight | Loose (persistence-ignorant domain) |
 | Unit-testing domain logic | Harder (needs DB or heavy mocks) | Easier (pure objects) |
 | Boilerplate | Low | Higher (repo, mapper, UoW) |
@@ -27,43 +27,43 @@ Both patterns answer the same question — *"where does the code that moves data
 
 ```csharp
 // Create + save
-var p = new Product { Name = "Widget", Price = 9.99m };
-p.Save();
+var todo = new Todo { Title = "Write docs", Status = "Open", Priority = 2 };
+todo.Save();
 
 // Read + update
-var found = Product.Find(p.Id);
-found!.Price = 12.99m;
+var found = Todo.Find(todo.Id);
+found!.Status = "Done";
 found.Save();
 
 // Delete + list
 found.Delete();
-var all = Product.All();
+var all = Todo.All();
 ```
 
-The `Product` class **inherits** `Save`, `Delete`, `Find`, `All` from `ActiveRecord<T>`. No repository object exists.
+The `Todo` class **inherits** `Save`, `Delete`, `Find`, `All` from `ActiveRecord<T>`. No repository object exists.
 
 ### Repository + Data Mapper (EF Core style)
 
 ```csharp
 // The entity is a POCO — no persistence methods
-public class Product
+public class Todo
 {
     public Guid Id { get; set; }
-    public string Name { get; set; } = "";
-    public decimal Price { get; set; }
+    public string Title { get; set; } = "";
+    public string Status { get; set; } = "Open";
 }
 
 // A dedicated repository class owns persistence
-public interface IProductRepository
+public interface ITodoRepository
 {
-    Task<Product?> FindAsync(Guid id);
-    Task<IReadOnlyList<Product>> AllAsync();
-    void Add(Product product);
-    void Remove(Product product);
+    Task<Todo?> FindAsync(Guid id);
+    Task<IReadOnlyList<Todo>> AllAsync();
+    void Add(Todo todo);
+    void Remove(Todo todo);
 }
 
 // Usage
-_repo.Add(new Product { Name = "Widget", Price = 9.99m });
+_repo.Add(new Todo { Title = "Write docs", Status = "Open" });
 await _uow.SaveChangesAsync();
 
 var found = await _repo.FindAsync(id);

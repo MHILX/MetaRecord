@@ -12,12 +12,14 @@ import type {
   WorkflowValidationResponse
 } from '../api/types';
 import { NodePalette } from './NodePalette';
+import { MetadataManager } from './MetadataManager';
 import { PropertyInspector } from './PropertyInspector';
 import { RunHistoryPanel } from './RunHistoryPanel';
 import { TestRunPanel } from './TestRunPanel';
 import { ValidationPanel } from './ValidationPanel';
 import { WorkflowCanvas } from './WorkflowCanvas';
 import { WorkflowList } from './WorkflowList';
+import { demoDomain } from './demoDomain';
 import { createNodeDraft, createWorkflowDraft } from './workflowModel';
 
 type NoticeKind = 'info' | 'error';
@@ -28,7 +30,7 @@ type NoticeState = {
 };
 
 export function WorkflowEditor() {
-  const preferredDemoWorkflowName = 'Capture product audit snapshot';
+  const preferredDemoWorkflowName = demoDomain.preferredWorkflowName;
   const [metadataObjects, setMetadataObjects] = useState<ObjectMetadata[]>([]);
   const [nodeTypes, setNodeTypes] = useState<WorkflowNodeType[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
@@ -87,6 +89,11 @@ export function WorkflowEditor() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function reloadMetadataObjects() {
+    const objects = await workflowApi.listObjects();
+    setMetadataObjects(objects);
   }
 
   async function reloadWorkflows(keepSelected?: WorkflowDefinition) {
@@ -304,6 +311,13 @@ export function WorkflowEditor() {
             onOpenWorkflow={openWorkflow}
             onCreateWorkflow={createWorkflow}
             onRefresh={loadInitialData}
+          />
+          <MetadataManager
+            metadataObjects={metadataObjects}
+            isLoading={isLoading}
+            onMetadataObjectsChange={setMetadataObjects}
+            onRefreshMetadata={reloadMetadataObjects}
+            onNotice={showNotice}
           />
           <NodePalette workflow={selectedWorkflow} nodeTypes={nodeTypes} onAddNode={addNode} />
         </aside>

@@ -35,6 +35,21 @@ public static class MetadataRegistry
     }
 
     /// <summary>
+    /// Replaces all registered metadata with the supplied set.
+    /// </summary>
+    public static void ReplaceAll(IEnumerable<IObjectMetadata> metadata)
+    {
+        lock (_syncRoot)
+        {
+            _registryByType.Clear();
+            _registryByName.Clear();
+
+            foreach (var item in metadata)
+                _registryByName[item.Name] = item;
+        }
+    }
+
+    /// <summary>
     /// Links a CLR type to already-registered metadata.
     /// Call this after loading metadata from DB to enable type-based lookup.
     /// </summary>

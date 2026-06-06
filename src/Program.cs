@@ -35,18 +35,30 @@ async Task RunDemoAsync()
 
     Console.WriteLine("2. VALID SAVE: BeforeSave + Created");
     var suffix = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff");
-    var product = new Product { Name = $"Widget-{suffix}", Price = 9.99m, Quantity = 100 };
-    await product.SaveAsync();
-    Console.WriteLine($"   Saved: {product.Name} @ ${product.Price} quantity {product.Quantity}");
+    var todo = new Todo
+    {
+        Title = $"Todo-{suffix}",
+        Description = "Demo todo item",
+        Status = "Open",
+        Priority = 3
+    };
+    await todo.SaveAsync();
+    Console.WriteLine($"   Saved: {todo.Title} [{todo.Status}] priority {todo.Priority}");
     await PrintLatestRunAsync(metaContext, WorkflowEventName.BeforeSave, "BeforeSave validation");
     await PrintLatestRunAsync(metaContext, WorkflowEventName.Created, "Created log");
     Console.WriteLine();
 
     Console.WriteLine("3. INVALID SAVE: BeforeSave rejection");
-    var invalidProduct = new Product { Name = $"Invalid-{suffix}", Price = 0m, Quantity = 1 };
+    var invalidTodo = new Todo
+    {
+        Title = "",
+        Description = "Invalid demo todo",
+        Status = "Open",
+        Priority = 1
+    };
     try
     {
-        await invalidProduct.SaveAsync();
+        await invalidTodo.SaveAsync();
     }
     catch (WorkflowSaveRejectedException ex)
     {
@@ -54,18 +66,18 @@ async Task RunDemoAsync()
         foreach (var result in ex.WorkflowResults)
             PrintRunResult(result, "Rejected run");
     }
-    Console.WriteLine($"   Product persisted: {Product.Find(invalidProduct.Id) is not null}");
+    Console.WriteLine($"   Todo persisted: {Todo.Find(invalidTodo.Id) is not null}");
     Console.WriteLine();
 
     Console.WriteLine("4. UPDATE SAVE: FieldChanged");
-    product.Quantity = 5;
-    await product.SaveAsync();
-    Console.WriteLine($"   Updated quantity: {product.Quantity}");
-    await PrintLatestRunAsync(metaContext, WorkflowEventName.FieldChanged, "Quantity low log");
+    todo.Status = "Done";
+    await todo.SaveAsync();
+    Console.WriteLine($"   Updated status: {todo.Status}");
+    await PrintLatestRunAsync(metaContext, WorkflowEventName.FieldChanged, "Completed log");
     Console.WriteLine();
 
     Console.WriteLine("5. METADATA-DRIVEN OBJECT MODEL");
-    var metadata = Product.Metadata;
+    var metadata = Todo.Metadata;
     Console.WriteLine($"   Object: {metadata.Name}");
     Console.WriteLine($"   Table:  {metadata.TableName}");
     Console.WriteLine("   Properties:");
@@ -73,8 +85,8 @@ async Task RunDemoAsync()
         Console.WriteLine($"     - {prop.Name} ({prop.ClrType.Name}) {(prop.IsRequired ? "[Required]" : "")}");
 
     Console.WriteLine("\n6. QUERY ALL (from SQLite)");
-    var allProducts = Product.All();
-    Console.WriteLine($"   Total products in database: {allProducts.Count}");
+    var allTodos = Todo.All();
+    Console.WriteLine($"   Total todos in database: {allTodos.Count}");
 
     Console.WriteLine("\n7. ALL REGISTERED METADATA (from database)");
     foreach (var objMeta in MetadataRegistry.GetAll())
@@ -92,7 +104,7 @@ async Task InitializeMetadataAsync(MetaRecordDbContext metaContext)
 {
     await MetadataLoader.InitializeAsync(metaContext, DemoMetadataSeeder.CreateDemoMetadata());
 
-    MetadataRegistry.LinkType<Product>("Product");
+    MetadataRegistry.LinkType<Todo>(DemoDomain.ObjectName);
 
     var store = EntityStore.Current;
     foreach (var metadata in MetadataRegistry.GetAll())

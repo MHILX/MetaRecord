@@ -5,6 +5,39 @@ using MetaRecord.Workflows.Validation;
 
 namespace MetaRecord.Web.Contracts;
 
+public sealed record ObjectMetadataUpsertRequest(
+    Guid? Id,
+    string Name,
+    string TableName,
+    IReadOnlyList<PropertyMetadataUpsertRequest> Properties);
+
+public sealed record PropertyMetadataUpsertRequest(
+    string Name,
+    string ColumnName,
+    string ClrType,
+    bool IsRequired,
+    int? MaxLength,
+    bool IsUnique,
+    bool IsPrimaryKey,
+    string? DefaultValue,
+    string? Caption);
+
+public enum MetadataValidationSeverity
+{
+    Info,
+    Warning,
+    Error
+}
+
+public sealed record MetadataValidationIssue(
+    MetadataValidationSeverity Severity,
+    string Message,
+    string? Field = null);
+
+public sealed record MetadataValidationResponse(
+    bool IsValid,
+    IReadOnlyList<MetadataValidationIssue> Issues);
+
 public sealed record ObjectMetadataResponse(
     Guid Id,
     string Name,

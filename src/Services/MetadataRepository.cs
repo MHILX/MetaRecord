@@ -42,6 +42,18 @@ public class MetadataRepository
     }
 
     /// <summary>
+    /// Gets metadata for a specific object by identifier.
+    /// </summary>
+    public async Task<IObjectMetadata?> GetByIdAsync(Guid id)
+    {
+        var entity = await _context.ObjectDefinitions
+            .Include(o => o.Properties.OrderBy(p => p.SortOrder))
+            .FirstOrDefaultAsync(o => o.Id == id);
+
+        return entity != null ? ToObjectMetadata(entity) : null;
+    }
+
+    /// <summary>
     /// Saves object metadata to the database.
     /// </summary>
     public async Task SaveAsync(IObjectMetadata metadata)
@@ -72,6 +84,25 @@ public class MetadataRepository
         _context.MetadataVersions.Add(new MetadataVersionEntity());
 
         await _context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Deletes metadata by identifier.
+    /// </summary>
+    public async Task<bool> DeleteAsync(Guid id)
+    {
+        var existing = await _context.ObjectDefinitions
+            .Include(o => o.Properties)
+            .FirstOrDefaultAsync(o => o.Id == id);
+
+        if (existing is null)
+            return false;
+
+        _context.PropertyDefinitions.RemoveRange(existing.Properties);
+        _context.ObjectDefinitions.Remove(existing);
+        _context.MetadataVersions.Add(new MetadataVersionEntity());
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     /// <summary>
@@ -106,12 +137,26 @@ public class MetadataRepository
             if (await GetByNameAsync(metadata.Name) is not null)
                 continue;
 
-            await SaveAsync(metadata);
+            var existing = await _context.ObjectDefinitions
+                .Include(o => o.Properties)
+                .FirstOrDefaultAsync(o => o.Id == metadata.Id);
+
+            if (existing is not null)
+            {
+                _context.PropertyDefinitions.RemoveRange(existing.Properties);
+                _context.ObjectDefinitions.Remove(existing);
+            }
+
+            _context.ObjectDefinitions.Add(ToObjectDefinitionEntity(metadata));
+            _context.MetadataVersions.Add(new MetadataVersionEntity());
             insertedCount++;
         }
 
         if (insertedCount > 0)
+        {
+            await _context.SaveChangesAsync();
             Console.WriteLine($"  [META] Seeded {insertedCount} missing object definition(s) to database");
+        }
     }
 
     /// <summary>
@@ -140,7 +185,7 @@ public class MetadataRepository
 
     private static PropertyMetadata ToPropertyMetadata(PropertyDefinitionEntity entity)
     {
-        var clrType = GetClrType(entity.DataType);
+        var clrType = MetadataTypeMapper.ParseClrType(entity.DataType);
         return new PropertyMetadata(entity.Name, entity.ColumnName, clrType, entity.IsRequired)
         {
             MaxLength = entity.MaxLength,
@@ -179,19 +224,6 @@ public class MetadataRepository
             SortOrder = sortOrder
         };
     }
-
-    private static Type GetClrType(string typeName) => typeName switch
-    {
-        "Guid" => typeof(Guid),
-        "String" => typeof(string),
-        "Int32" => typeof(int),
-        "Int64" => typeof(long),
-        "Decimal" => typeof(decimal),
-        "Double" => typeof(double),
-        "Boolean" => typeof(bool),
-        "DateTime" => typeof(DateTime),
-        _ => typeof(string)
-    };
 
     #endregion
 }

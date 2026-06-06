@@ -43,14 +43,15 @@ public sealed class WorkflowApiTests
 
         Assert.NotNull(metadataObjects);
         Assert.Equal(2, metadataObjects.Length);
-        Assert.Contains(metadataObjects, metadata => metadata.Name == "WorkflowAuditEntry");
+        Assert.Contains(metadataObjects, metadata => metadata.Name == "Todo");
+        Assert.Contains(metadataObjects, metadata => metadata.Name == "TodoAuditEntry");
 
         Assert.NotNull(workflows);
         Assert.Equal(4, workflows.Length);
-        Assert.Contains(workflows, workflow => workflow.Name == "Capture product audit snapshot" && workflow.EventName == WorkflowEventName.Manual);
-        Assert.Contains(workflows, workflow => workflow.Name == "Reject invalid product price" && workflow.EventName == WorkflowEventName.BeforeSave);
-        Assert.Contains(workflows, workflow => workflow.Name == "Write log when product is created" && workflow.EventName == WorkflowEventName.Created);
-        Assert.Contains(workflows, workflow => workflow.Name == "Write log when quantity is low" && workflow.EventName == WorkflowEventName.FieldChanged);
+        Assert.Contains(workflows, workflow => workflow.Name == "Capture todo snapshot" && workflow.EventName == WorkflowEventName.Manual);
+        Assert.Contains(workflows, workflow => workflow.Name == "Reject empty todo title" && workflow.EventName == WorkflowEventName.BeforeSave);
+        Assert.Contains(workflows, workflow => workflow.Name == "Write log when todo is created" && workflow.EventName == WorkflowEventName.Created);
+        Assert.Contains(workflows, workflow => workflow.Name == "Write log when todo is completed" && workflow.EventName == WorkflowEventName.FieldChanged);
     }
 
     [Fact]
@@ -60,16 +61,17 @@ public sealed class WorkflowApiTests
         var client = factory.CreateClient();
 
         var workflows = await client.GetFromJsonAsync<WorkflowDefinition[]>("/api/workflows", JsonOptions);
-        var workflow = Assert.Single(workflows!.Where(workflow => workflow.Name == "Capture product audit snapshot"));
+        var workflow = Assert.Single(workflows!.Where(workflow => workflow.Name == "Capture todo snapshot"));
 
         var runResponse = await client.PostAsJsonAsync($"/api/workflows/{workflow.Id}/test-run", new
         {
             currentRecord = new
             {
                 id = Guid.NewGuid(),
-                name = "Widget",
-                price = 9.99m,
-                quantity = 5
+                title = "Todo item",
+                description = "Sample todo",
+                status = "Open",
+                priority = 3
             }
         });
         var run = await runResponse.Content.ReadFromJsonAsync<WorkflowTestRunResponse>(JsonOptions);
@@ -117,9 +119,10 @@ public sealed class WorkflowApiTests
             currentRecord = new
             {
                 id = Guid.NewGuid(),
-                name = "Widget",
-                price = 9.99m,
-                quantity = 5
+                title = "Todo item",
+                description = "Sample todo",
+                status = "Open",
+                priority = 3
             }
         });
         var run = await runResponse.Content.ReadFromJsonAsync<WorkflowTestRunResponse>(JsonOptions);
@@ -135,7 +138,7 @@ public sealed class WorkflowApiTests
     }
 
     private static WorkflowDefinition CreateManualLogWorkflow(
-        string objectName = "Product",
+        string objectName = "Todo",
         bool isEnabled = true) => new()
     {
         Id = Guid.NewGuid(),
@@ -149,7 +152,7 @@ public sealed class WorkflowApiTests
             Node("log-1", "action.write-log", """
             {
               "severity": "Information",
-              "message": "Manual run for {{currentRecord.name}}."
+              "message": "Manual run for {{currentRecord.title}}."
             }
             """)
         },

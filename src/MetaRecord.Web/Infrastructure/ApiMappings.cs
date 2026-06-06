@@ -8,6 +8,16 @@ namespace MetaRecord.Web.Infrastructure;
 
 internal static class ApiMappings
 {
+    public static IObjectMetadata ToMetadata(ObjectMetadataUpsertRequest request, Guid id) => new ObjectMetadata
+    {
+        Id = id,
+        Name = request.Name,
+        TableName = request.TableName,
+        Properties = (request.Properties ?? Array.Empty<PropertyMetadataUpsertRequest>())
+            .Select(ToMetadata)
+            .ToList()
+    };
+
     public static ObjectMetadataResponse ToResponse(IObjectMetadata metadata) => new(
         metadata.Id,
         metadata.Name,
@@ -66,6 +76,21 @@ internal static class ApiMappings
             result[key] = ToObject(value);
 
         return result;
+    }
+
+    private static PropertyMetadata ToMetadata(PropertyMetadataUpsertRequest property)
+    {
+        if (!MetadataTypeMapper.TryParseClrType(property.ClrType, out var clrType))
+            clrType = MetadataTypeMapper.ParseClrType(property.ClrType);
+
+        return new PropertyMetadata(property.Name, property.ColumnName, clrType, property.IsRequired)
+        {
+            MaxLength = property.MaxLength,
+            IsUnique = property.IsUnique,
+            IsPrimaryKey = property.IsPrimaryKey,
+            DefaultValue = property.DefaultValue,
+            Caption = property.Caption
+        };
     }
 
     private static PropertyMetadataResponse ToResponse(PropertyMetadata property) => new(

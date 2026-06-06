@@ -16,8 +16,8 @@ The Active Record pattern wraps a database row in a domain object, combining dat
 - **Query** all instances (`All()`)
 
 ```csharp
-var product = new Product { Name = "Widget", Price = 9.99m };
-product.Save();  // Entity persists itself - no separate repository needed
+var todo = new Todo { Title = "Write docs", Status = "Open", Priority = 2 };
+todo.Save();  // Entity persists itself - no separate repository needed
 ```
 
 ### Metadata-Driven Object Model
@@ -30,7 +30,7 @@ The metadata system provides runtime introspection of entity structures. **Metad
 - **Schema evolution** - Track metadata versions
 
 ```csharp
-var metadata = Product.Metadata;
+var metadata = Todo.Metadata;
 Console.WriteLine($"Table: {metadata.TableName}");
 foreach (var prop in metadata.Properties)
     Console.WriteLine($"  {prop.Name}: {prop.ClrType.Name}");
@@ -54,7 +54,7 @@ The visual editor is intentionally powered by the same backend node catalog and 
 
 ### What is the Active Record pattern?
 
-Active Record, cataloged by Martin Fowler in *Patterns of Enterprise Application Architecture*, is an object that **wraps a single row in a database table and carries both its data and the behavior needed to persist itself**. One class owns the schema shape, the domain logic, and the CRUD operations — so `product.Save()` is all a caller needs.
+Active Record, cataloged by Martin Fowler in *Patterns of Enterprise Application Architecture*, is an object that **wraps a single row in a database table and carries both its data and the behavior needed to persist itself**. One class owns the schema shape, the domain logic, and the CRUD operations — so `todo.Save()` is all a caller needs.
 
 It is most useful when the domain model and the table layout line up closely (CRUD-heavy apps, admin tools, prototypes). The trade-off is tight coupling between domain logic and persistence: entities are harder to unit-test in isolation, and complex domains often outgrow it and migrate toward **Repository** + **Data Mapper** patterns. MetaRecord implements the "classic" form via the generic `ActiveRecord<T>` base class.
 
@@ -80,14 +80,14 @@ The cost is a bootstrapping step (`MetadataLoader`) and an indirection — metad
 ### How the three pieces fit together
 
 ```
-Product.Save()
-   └─► ActiveRecord<Product>.Save()
-          └─► asks MetadataRegistry for Product's shape (IObjectMetadata)
+Todo.Save()
+   └─► ActiveRecord<Todo>.Save()
+          └─► asks MetadataRegistry for Todo's shape (IObjectMetadata)
                  └─► EntityStore uses that shape + reflection
                         └─► emits parameterized SQL against metarecord.db
 ```
 
-`MetadataRegistry` is the in-memory cache populated at startup by `MetadataLoader`, which in turn reads from the `meta.ObjectDefinitions` / `meta.PropertyDefinitions` tables via `MetadataRepository`. Nothing in `ActiveRecord<T>` or `EntityStore` hard-codes the `Product` shape — it's all read from metadata.
+`MetadataRegistry` is the in-memory cache populated at startup by `MetadataLoader`, which in turn reads from the `meta.ObjectDefinitions` / `meta.PropertyDefinitions` tables via `MetadataRepository`. Nothing in `ActiveRecord<T>` or `EntityStore` hard-codes the `Todo` shape — it's all read from metadata.
 
 ## Project Structure
 
@@ -101,7 +101,7 @@ MetaRecord/
 │   ├── MetaRecord.csproj                 # Console demo + core runtime for current MVP stage
 │   ├── Program.cs                        # Console proof for metadata + workflow runtime
 │   ├── Data/                             # EF metadata store + dynamic entity persistence
-│   ├── Models/                           # ActiveRecord, metadata contracts, Product sample
+│   ├── Models/                           # ActiveRecord, metadata contracts, Todo sample
 │   ├── Services/                         # Metadata initialization/repository services
 │   ├── Workflows/                        # Definition, catalog, validation, runtime, persistence
 │   ├── MetaRecord.Web/                   # ASP.NET Core API for editor/runtime operations
@@ -128,7 +128,7 @@ MetaRecord/
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │   ┌─────────────┐      ┌──────────────────┐                 │
-│   │   Product   │ ───► │ MetadataRegistry │ (runtime cache) │
+│   │     Todo    │ ───► │ MetadataRegistry │ (runtime cache) │
 │   │  .Metadata  │      └────────┬─────────┘                 │
 │   └─────────────┘               │                           │
 │         │                       │ loaded from               │
@@ -175,14 +175,15 @@ The `meta.*` prefix below is the conceptual EF Core schema. SQLite does not impl
 
 ### Entity Tables (Metadata-driven)
 
-Entity tables are created dynamically based on metadata definitions. For example, the `Product` metadata creates:
+Entity tables are created dynamically based on metadata definitions. For example, the `Todo` metadata creates:
 
 ```sql
-CREATE TABLE Products (
-    Id TEXT PRIMARY KEY,
-    Name TEXT NOT NULL,
-    Price REAL NOT NULL,
-    Quantity INTEGER
+CREATE TABLE Todos (
+   Id TEXT PRIMARY KEY,
+   Title TEXT NOT NULL,
+   Description TEXT,
+   Status TEXT NOT NULL,
+   Priority INTEGER
 )
 ```
 
@@ -215,7 +216,7 @@ npm --prefix src/MetaRecord.Editor run build
 dotnet run --project src/MetaRecord.csproj
 ```
 
-The console demo initializes metadata, seeds sample workflows, saves valid and invalid products, and prints workflow run results.
+The console demo initializes metadata, seeds sample workflows, saves valid and invalid todos, and prints workflow run results.
 
 ### Run the Low-Code Workflow MVP
 
@@ -227,9 +228,9 @@ Use the helper script for a one-command launch on Windows:
 
 It starts the API in one PowerShell window and the visual editor in another, then opens the editor automatically. The API uses `http://127.0.0.1:5050` when available and falls back to the next free port if needed; the editor does the same for `5173`. Pass `-ApiPort 5000` if you want the original API port.
 
-On startup, the web host seeds the demo metadata plus four demo workflows, so the editor opens with a complete sample workflow set instead of an empty canvas. The default editor selection is the richer "Capture product audit snapshot" workflow.
+On startup, the web host seeds the demo metadata plus four demo workflows, so the editor opens with a complete sample workflow set instead of an empty canvas. The default editor selection is the richer "Capture todo snapshot" workflow.
 
-For a guided first-time tour of that workflow and every editor panel, see [Capture Product Audit Snapshot Workflow](docs/Capture-Product-Audit-Snapshot-Workflow.md).
+For a guided first-time tour of that workflow and every editor panel, see [Capture Todo Audit Snapshot Workflow](docs/Capture-Todo-Audit-Snapshot-Workflow.md).
 
 Start the API in one terminal:
 
@@ -293,33 +294,33 @@ The first API or console run creates a local SQLite `metarecord.db` and seeds me
   [DATA] Entity tables initialized
 
 1. SEED WORKFLOW DEFINITIONS
-    Enabled: Capture product audit snapshot (Manual)
-   Enabled: Reject invalid product price (BeforeSave)
-   Enabled: Write log when product is created (Created)
-   Enabled: Write log when quantity is low (FieldChanged)
+   Enabled: Capture todo snapshot (Manual)
+   Enabled: Reject empty todo title (BeforeSave)
+   Enabled: Write log when todo is created (Created)
+   Enabled: Write log when todo is completed (FieldChanged)
 
 2. VALID SAVE: BeforeSave + Created
-   Saved: Widget-... @ $9.99 quantity 100
+   Saved: Todo-... [Open] priority 3
    BeforeSave validation: Succeeded (... steps)
    Created log: Succeeded (... steps)
 
 3. INVALID SAVE: BeforeSave rejection
-   Rejected: Price must be greater than zero for Invalid-...
-   Product persisted: False
+   Rejected: Todo title is required for ...
+   Todo persisted: False
 
 4. UPDATE SAVE: FieldChanged
-   Updated quantity: 5
-   Quantity low log: Succeeded (... steps)
+   Updated status: Done
+   Completed log: Succeeded (... steps)
 
 5. METADATA-DRIVEN OBJECT MODEL
-   Object: Product
-   Table:  Products
+   Object: Todo
+   Table:  Todos
 
 6. QUERY ALL (from SQLite)
-   Total products in database: ...
+   Total todos in database: ...
 
 7. ALL REGISTERED METADATA (from database)
-   - Product -> Products (4 properties)
+   - Todo -> Todos (5 properties)
 
 === Demo Complete ===
 ```
@@ -342,7 +343,7 @@ The first API or console run creates a local SQLite `metarecord.db` and seeds me
    ```csharp
    var seedData = new[]
    {
-       // existing Product metadata...
+      // existing Todo metadata...
        new ObjectMetadata
        {
            Id = Guid.Parse("22222222-2222-2222-2222-222222222222"),

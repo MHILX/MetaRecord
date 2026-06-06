@@ -13,13 +13,11 @@ internal static class MetaRecordInitialization
         await using var scope = app.Services.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<MetaRecordDbContext>();
         var entityStore = scope.ServiceProvider.GetRequiredService<EntityStore>();
+        var metadataRepository = scope.ServiceProvider.GetRequiredService<MetadataRepository>();
 
-        MetadataRegistry.Clear();
         await MetadataLoader.InitializeAsync(context, DemoMetadataSeeder.CreateDemoMetadata());
         var workflowRepository = scope.ServiceProvider.GetRequiredService<WorkflowRepository>();
         await DemoWorkflowSeeder.SeedAsync(workflowRepository);
-        MetadataRegistry.LinkType<Product>("Product");
-        foreach (var metadata in MetadataRegistry.GetAll())
-            entityStore.EnsureTableExists(metadata);
+        await MetadataRegistrySynchronizer.RefreshAsync(metadataRepository, entityStore);
     }
 }

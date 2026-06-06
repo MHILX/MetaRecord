@@ -208,7 +208,7 @@ button:disabled {
 }
 
 .left-rail {
-  grid-template-rows: minmax(0, 1fr) minmax(0, 0.9fr);
+  grid-template-rows: minmax(0, 0.95fr) minmax(0, 1.05fr) minmax(0, 0.9fr);
 }
 
 .right-rail {
@@ -458,6 +458,104 @@ textarea {
   gap: 12px;
 }
 
+.metadata-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.metadata-heading-actions,
+.metadata-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metadata-object-list,
+.metadata-property-list,
+.metadata-form,
+.metadata-issues {
+  display: grid;
+  gap: 8px;
+}
+
+.metadata-object-summary,
+.metadata-property-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.metadata-object-summary {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+}
+
+.metadata-object-summary span,
+.metadata-property-card-header strong {
+  font-size: 12px;
+  color: #536176;
+}
+
+.metadata-object-summary strong {
+  font-size: 14px;
+}
+
+.metadata-property-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.metadata-property-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.metadata-help {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.metadata-property-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metadata-property-grid .field-control {
+  gap: 4px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding-top: 16px;
+}
+
+.checkbox-field span {
+  color: #536176;
+}
+
+.metadata-issues .issue-row span {
+  align-items: baseline;
+}
+
+.metadata-issues .issue-row strong {
+  font-size: 12px;
+}
+
+.metadata-issues .issue-row small {
+  flex-basis: 100%;
+}
+
 .inspector-node-header {
   display: grid;
   gap: 3px;
@@ -683,6 +781,10 @@ code {
   }
 
   .left-rail {
-    grid-template-rows: auto auto;
+    grid-template-rows: auto auto auto;
+  }
+
+  .metadata-property-grid {
+    grid-template-columns: 1fr;
   }
 }

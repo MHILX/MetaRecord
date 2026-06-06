@@ -10,6 +10,8 @@ export type WorkflowRunStatus = 'Succeeded' | 'Failed' | 'Canceled' | 'Skipped';
 
 export type WorkflowValidationSeverity = 'Info' | 'Warning' | 'Error';
 
+export type MetadataValidationSeverity = 'Info' | 'Warning' | 'Error';
+
 export interface PropertyMetadata {
   name: string;
   columnName: string;
@@ -27,6 +29,36 @@ export interface ObjectMetadata {
   name: string;
   tableName: string;
   properties: PropertyMetadata[];
+}
+
+export interface PropertyMetadataUpsertRequest {
+  name: string;
+  columnName: string;
+  clrType: string;
+  isRequired: boolean;
+  maxLength?: number | null;
+  isUnique: boolean;
+  isPrimaryKey: boolean;
+  defaultValue?: string | null;
+  caption?: string | null;
+}
+
+export interface ObjectMetadataUpsertRequest {
+  id?: string | null;
+  name: string;
+  tableName: string;
+  properties: PropertyMetadataUpsertRequest[];
+}
+
+export interface MetadataValidationIssue {
+  severity: MetadataValidationSeverity;
+  message: string;
+  field?: string | null;
+}
+
+export interface MetadataValidationResponse {
+  isValid: boolean;
+  issues: MetadataValidationIssue[];
 }
 
 export interface NodePortDefinition {

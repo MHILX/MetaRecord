@@ -29,8 +29,8 @@ public static class DemoWorkflowSeeder
     private static WorkflowDefinition CreateHeroWorkflow() => new()
     {
         Id = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000010"),
-        Name = "Capture product audit snapshot",
-        ObjectName = "Product",
+        Name = DemoDomain.WorkflowNames.CaptureAuditSnapshot,
+        ObjectName = DemoDomain.ObjectName,
         EventName = WorkflowEventName.Manual,
         IsEnabled = true,
         Nodes = new[]
@@ -38,19 +38,19 @@ public static class DemoWorkflowSeeder
             Node("trigger-1", "trigger.manual", JsonSerializer.Serialize(new { }), 80, 140),
             Node("create-audit-1", "action.create-record", JsonSerializer.Serialize(new
             {
-                targetObjectName = "WorkflowAuditEntry",
+                targetObjectName = DemoDomain.AuditEntryObjectName,
                 fieldMappings = new
                 {
-                    ProductName = "{{currentRecord.Name}}",
-                    ProductPrice = "{{currentRecord.Price}}",
-                    Quantity = "{{currentRecord.Quantity}}",
+                    TodoTitle = "{{currentRecord.Title}}",
+                    TodoStatus = "{{currentRecord.Status}}",
+                    TodoPriority = "{{currentRecord.Priority}}",
                     WorkflowId = "{{event.WorkflowId}}",
                     EventName = "{{event.EventName}}",
-                    Note = "Manual audit snapshot for {{currentRecord.Name}}"
+                    Note = "Manual audit snapshot for {{currentRecord.Title}}"
                 }
             }), 380, 140),
-            WriteLogNode("log-1", "Audit snapshot created for {{currentRecord.Name}}.", 700, 140),
-            StopNode("stop-1", "Audit snapshot workflow complete for {{currentRecord.Name}}.", 1020, 140)
+            WriteLogNode("log-1", "Audit snapshot created for {{currentRecord.Title}}.", 700, 140),
+            StopNode("stop-1", "Audit snapshot workflow complete for {{currentRecord.Title}}.", 1020, 140)
         },
         Edges = new[]
         {
@@ -63,15 +63,15 @@ public static class DemoWorkflowSeeder
     private static WorkflowDefinition CreateRejectInvalidPriceWorkflow() => new()
     {
         Id = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"),
-        Name = "Reject invalid product price",
-        ObjectName = "Product",
+        Name = DemoDomain.WorkflowNames.RejectInvalidTodoTitle,
+        ObjectName = DemoDomain.ObjectName,
         EventName = WorkflowEventName.BeforeSave,
         IsEnabled = true,
         Nodes = new[]
         {
             Node("trigger-1", "trigger.before-save", JsonSerializer.Serialize(new { }), 80, 140),
-                        ConditionNode("condition-1", "Price", "lessThanOrEqual", "0", 380, 140),
-            Node("reject-1", "action.reject-save", JsonSerializer.Serialize(new { message = "Price must be greater than zero for {{currentRecord.Name}}." }), 680, 140)
+            ConditionNode("condition-1", "Title", "isEmpty", "null", 380, 140),
+            Node("reject-1", "action.reject-save", JsonSerializer.Serialize(new { message = "Todo title is required for {{currentRecord.Title}}." }), 680, 140)
         },
         Edges = new[]
         {
@@ -83,14 +83,14 @@ public static class DemoWorkflowSeeder
     private static WorkflowDefinition CreateCreatedLogWorkflow() => new()
     {
         Id = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"),
-        Name = "Write log when product is created",
-        ObjectName = "Product",
+        Name = DemoDomain.WorkflowNames.CreatedLog,
+        ObjectName = DemoDomain.ObjectName,
         EventName = WorkflowEventName.Created,
         IsEnabled = true,
         Nodes = new[]
         {
             Node("trigger-1", "trigger.record-created", JsonSerializer.Serialize(new { }), 80, 140),
-            WriteLogNode("log-1", "Created {{currentRecord.Name}} at price {{currentRecord.Price}}.", 380, 140)
+            WriteLogNode("log-1", "Created todo {{currentRecord.Title}} with status {{currentRecord.Status}}.", 380, 140)
         },
         Edges = new[]
         {
@@ -101,15 +101,15 @@ public static class DemoWorkflowSeeder
     private static WorkflowDefinition CreateLowQuantityChangedWorkflow() => new()
     {
         Id = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000003"),
-        Name = "Write log when quantity is low",
-        ObjectName = "Product",
+        Name = DemoDomain.WorkflowNames.CompletedLog,
+        ObjectName = DemoDomain.ObjectName,
         EventName = WorkflowEventName.FieldChanged,
         IsEnabled = true,
         Nodes = new[]
         {
-            Node("trigger-1", "trigger.field-changed", JsonSerializer.Serialize(new { fieldName = "Quantity" }), 80, 140),
-            ConditionNode("condition-1", "Quantity", "lessThan", "10", 380, 140),
-            WriteLogNode("log-1", "Low quantity for {{currentRecord.Name}}: {{currentRecord.Quantity}} remaining.", 680, 140)
+            Node("trigger-1", "trigger.field-changed", JsonSerializer.Serialize(new { fieldName = "Status" }), 80, 140),
+            ConditionNode("condition-1", "Status", "equals", JsonSerializer.Serialize("Done"), 380, 140),
+            WriteLogNode("log-1", "Todo {{currentRecord.Title}} marked done.", 680, 140)
         },
         Edges = new[]
         {

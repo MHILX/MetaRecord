@@ -21,6 +21,7 @@ var dbPath = builder.Configuration["MetaRecord:DbPath"] ??
 
 builder.Services.AddScoped(_ => new MetaRecordDbContext(dbPath));
 builder.Services.AddSingleton(_ => new EntityStore(dbPath));
+builder.Services.AddScoped<MetadataRepository>();
 builder.Services.AddSingleton(WorkflowNodeCatalog.Default);
 builder.Services.AddSingleton(services => new WorkflowValidator(services.GetRequiredService<WorkflowNodeCatalog>()));
 builder.Services.AddScoped<WorkflowRepository>();
