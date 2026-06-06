@@ -45,6 +45,10 @@ const bottomRailTabs: Array<{ id: BottomRailTab; label: string }> = [
   { id: 'history', label: 'Run History' }
 ];
 
+function getLeftRailTabLabel(tab: LeftRailTab): string {
+  return leftRailTabs.find(candidate => candidate.id === tab)?.label ?? 'Panel';
+}
+
 function getBottomRailTabLabel(tab: BottomRailTab): string {
   return bottomRailTabs.find(candidate => candidate.id === tab)?.label ?? 'Panel';
 }
@@ -69,6 +73,7 @@ export function WorkflowEditor() {
   const [leftRailTab, setLeftRailTab] = useState<LeftRailTab>('workflows');
   const [bottomRailTab, setBottomRailTab] = useState<BottomRailTab>('validation');
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false);
+  const [isLeftRailDialogOpen, setIsLeftRailDialogOpen] = useState(false);
   const [isBottomRailDialogOpen, setIsBottomRailDialogOpen] = useState(false);
 
   const selectedWorkflowIsSaved = useMemo(
@@ -99,17 +104,20 @@ export function WorkflowEditor() {
   }, [metadataObjects, selectedWorkflow?.objectName]);
 
   useEffect(() => {
-    if (!isBottomRailDialogOpen)
+    if (!isLeftRailDialogOpen && !isBottomRailDialogOpen)
       return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape')
+      {
+        setIsLeftRailDialogOpen(false);
         setIsBottomRailDialogOpen(false);
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isBottomRailDialogOpen]);
+  }, [isLeftRailDialogOpen, isBottomRailDialogOpen]);
 
   function showNotice(message: string, kind: NoticeKind = 'info') {
     setNotice({ message, kind });
@@ -362,19 +370,37 @@ export function WorkflowEditor() {
 
       <div className={isInspectorCollapsed ? 'editor-layout inspector-collapsed' : 'editor-layout'}>
         <aside className="left-rail">
-          <div className="rail-tabs" role="tablist" aria-label="Editor panels">
-            {leftRailTabs.map(tab => (
+          <div className="left-rail-toolbar">
+            <div className="rail-tabs left-rail-tabs" role="tablist" aria-label="Editor panels">
+              {leftRailTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={leftRailTab === tab.id}
+                  className={leftRailTab === tab.id ? 'rail-tab active' : 'rail-tab'}
+                  onClick={() => setLeftRailTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {leftRailTab !== 'workflows' && (
               <button
-                key={tab.id}
+                className="secondary-button left-rail-popout-button"
                 type="button"
-                role="tab"
-                aria-selected={leftRailTab === tab.id}
-                className={leftRailTab === tab.id ? 'rail-tab active' : 'rail-tab'}
-                onClick={() => setLeftRailTab(tab.id)}
+                onClick={() => {
+                  setIsBottomRailDialogOpen(false);
+                  setIsLeftRailDialogOpen(true);
+                }}
+                aria-haspopup="dialog"
+                aria-expanded={isLeftRailDialogOpen}
               >
-                {tab.label}
+                <Maximize2 size={16} aria-hidden="true" />
+                Expand
               </button>
-            ))}
+            )}
           </div>
 
           <div className="left-rail-panel-stack">
@@ -439,6 +465,44 @@ export function WorkflowEditor() {
         </aside>
       </div>
 
+      {isLeftRailDialogOpen && leftRailTab !== 'workflows' && (
+        <div className="panel-dialog-overlay" role="presentation" onClick={() => setIsLeftRailDialogOpen(false)}>
+          <section
+            className="panel-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="left-rail-dialog-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="panel-dialog-header">
+              <div>
+                <span>Expanded left rail</span>
+                <h2 id="left-rail-dialog-title">{getLeftRailTabLabel(leftRailTab)}</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setIsLeftRailDialogOpen(false)} aria-label="Close popout">
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="panel-dialog-body">
+              {leftRailTab === 'metadata' && (
+                <MetadataManager
+                  metadataObjects={metadataObjects}
+                  isLoading={isLoading}
+                  onMetadataObjectsChange={setMetadataObjects}
+                  onRefreshMetadata={reloadMetadataObjects}
+                  onNotice={showNotice}
+                />
+              )}
+
+              {leftRailTab === 'palette' && (
+                <NodePalette workflow={selectedWorkflow} nodeTypes={nodeTypes} onAddNode={addNode} />
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
       <footer className="bottom-rail">
         <div className="bottom-rail-toolbar">
           <div className="rail-tabs bottom-rail-tabs" role="tablist" aria-label="Run panels">
@@ -461,7 +525,10 @@ export function WorkflowEditor() {
           <button
             className="secondary-button bottom-rail-popout-button"
             type="button"
-            onClick={() => setIsBottomRailDialogOpen(true)}
+            onClick={() => {
+              setIsLeftRailDialogOpen(false);
+              setIsBottomRailDialogOpen(true);
+            }}
             aria-haspopup="dialog"
             aria-expanded={isBottomRailDialogOpen}
           >

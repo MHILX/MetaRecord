@@ -215,6 +215,25 @@ button:disabled {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.left-rail-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.left-rail-tabs {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.left-rail-popout-button {
+  flex: none;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .right-rail {
   grid-template-rows: minmax(0, 1fr);
 }
@@ -250,6 +269,10 @@ button:disabled {
   background: transparent;
   color: #506074;
   height: 34px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rail-tab:hover {
@@ -741,6 +764,7 @@ textarea {
   overflow: hidden;
 }
 
+.panel-dialog-body > .panel,
 .panel-dialog-body > .bottom-panel-section {
   height: 100%;
 }

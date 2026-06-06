@@ -14,7 +14,7 @@ export function NodePalette({ workflow, nodeTypes, onAddNode }: NodePaletteProps
   if (!workflow) {
     return (
       <section className="panel panel-compact">
-        <h2>Node Palette</h2>
+        <h2>Nodes</h2>
         <p className="muted">Create or open a workflow to add nodes.</p>
       </section>
     );
