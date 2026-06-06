@@ -28,14 +28,14 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
             var store = ConfigureRuntime(dbPath, repository);
             await repository.SaveDefinitionAsync(CreateBeforeSaveSetFieldWorkflow());
 
-            var product = new Product { Name = "Widget", Price = 9.99m, Quantity = 1 };
+            var todo = new Todo { Title = "Todo item", Description = "Initial todo", Status = "Open", Priority = 1 };
 
-            await product.SaveAsync();
+            await todo.SaveAsync();
 
-            var saved = store.Find<Product>(Product.Metadata, product.Id);
+            var saved = store.Find<Todo>(Todo.Metadata, todo.Id);
             Assert.NotNull(saved);
-            Assert.Equal(25, product.Quantity);
-            Assert.Equal(25, saved.Quantity);
+            Assert.Equal(25, todo.Priority);
+            Assert.Equal(25, saved.Priority);
             Assert.Equal("Succeeded", await GetOnlyRunStatusAsync(context, WorkflowEventName.BeforeSave));
         }
         finally
@@ -54,13 +54,13 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
             var repository = new WorkflowRepository(context);
             var store = ConfigureRuntime(dbPath, repository);
             await repository.SaveDefinitionAsync(CreateBeforeSaveRejectWorkflow());
-            var product = new Product { Name = "Widget", Price = -1m, Quantity = 1 };
+            var todo = new Todo { Title = "Todo item", Description = "Initial todo", Status = "Open", Priority = -1 };
 
-            var exception = await Assert.ThrowsAsync<WorkflowSaveRejectedException>(() => product.SaveAsync());
+            var exception = await Assert.ThrowsAsync<WorkflowSaveRejectedException>(() => todo.SaveAsync());
 
-            Assert.Equal("Price -1 is invalid.", exception.Message);
-            Assert.True(product.IsNew);
-            Assert.Equal(0, store.Count(Product.Metadata));
+            Assert.Equal("Priority -1 is invalid.", exception.Message);
+            Assert.True(todo.IsNew);
+            Assert.Equal(0, store.Count(Todo.Metadata));
             Assert.Equal("Canceled", await GetOnlyRunStatusAsync(context, WorkflowEventName.BeforeSave));
         }
         finally
@@ -78,15 +78,15 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
             await using var context = await CreateConfiguredContextAsync(dbPath);
             var repository = new WorkflowRepository(context);
             ConfigureRuntime(dbPath, repository);
-            await repository.SaveDefinitionAsync(CreateWriteLogWorkflow(WorkflowEventName.Created, "trigger.record-created", "created-log", "Created {{currentRecord.Name}}."));
+            await repository.SaveDefinitionAsync(CreateWriteLogWorkflow(WorkflowEventName.Created, "trigger.record-created", "created-log", "Created {{currentRecord.Title}}."));
 
-            var product = new Product { Name = "Widget", Price = 9.99m, Quantity = 1 };
+            var todo = new Todo { Title = "Todo item", Description = "Initial todo", Status = "Open", Priority = 1 };
 
-            await product.SaveAsync();
+            await todo.SaveAsync();
 
             var run = await GetOnlyRunAsync(context, WorkflowEventName.Created);
             Assert.Equal("Succeeded", run.Status);
-            Assert.Contains(run.Steps, step => step.NodeId == "log-1" && step.OutputJson!.Contains("Created Widget."));
+            Assert.Contains(run.Steps, step => step.NodeId == "log-1" && step.OutputJson!.Contains("Created Todo item."));
         }
         finally
         {
@@ -103,18 +103,18 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
             await using var context = await CreateConfiguredContextAsync(dbPath);
             var repository = new WorkflowRepository(context);
             ConfigureRuntime(dbPath, repository);
-            var product = new Product { Name = "Widget", Price = 9.99m, Quantity = 1 };
-            await product.SaveAsync();
+            var todo = new Todo { Title = "Todo item", Description = "Initial todo", Status = "Open", Priority = 1 };
+            await todo.SaveAsync();
 
-            var updatedWorkflow = CreateWriteLogWorkflow(WorkflowEventName.Updated, "trigger.record-updated", "updated-log", "Updated {{currentRecord.Name}}.");
-            var priceChangedWorkflow = CreateFieldChangedWorkflow("Price", "Price changed to {{currentRecord.Price}}.");
-            var quantityChangedWorkflow = CreateFieldChangedWorkflow("Quantity", "Quantity changed to {{currentRecord.Quantity}}.");
+            var updatedWorkflow = CreateWriteLogWorkflow(WorkflowEventName.Updated, "trigger.record-updated", "updated-log", "Updated {{currentRecord.Title}}.");
+            var statusChangedWorkflow = CreateFieldChangedWorkflow("Status", "Status changed to {{currentRecord.Status}}.");
+            var priorityChangedWorkflow = CreateFieldChangedWorkflow("Priority", "Priority changed to {{currentRecord.Priority}}.");
             await repository.SaveDefinitionAsync(updatedWorkflow);
-            await repository.SaveDefinitionAsync(priceChangedWorkflow);
-            await repository.SaveDefinitionAsync(quantityChangedWorkflow);
+            await repository.SaveDefinitionAsync(statusChangedWorkflow);
+            await repository.SaveDefinitionAsync(priorityChangedWorkflow);
 
-            product.Price = 12.50m;
-            await product.SaveAsync();
+            todo.Status = "Done";
+            await todo.SaveAsync();
 
             var updatedRun = await GetOnlyRunAsync(context, WorkflowEventName.Updated);
             var fieldChangedRuns = await context.WorkflowRuns
@@ -124,8 +124,8 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
 
             Assert.Equal("Succeeded", updatedRun.Status);
             var fieldChangedRun = Assert.Single(fieldChangedRuns);
-            Assert.Equal(priceChangedWorkflow.Id, fieldChangedRun.WorkflowId);
-            Assert.NotEqual(quantityChangedWorkflow.Id, fieldChangedRun.WorkflowId);
+            Assert.Equal(statusChangedWorkflow.Id, fieldChangedRun.WorkflowId);
+            Assert.NotEqual(priorityChangedWorkflow.Id, fieldChangedRun.WorkflowId);
         }
         finally
         {
@@ -143,11 +143,11 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
             var repository = new WorkflowRepository(context);
             var store = ConfigureRuntime(dbPath, repository);
             await repository.SaveDefinitionAsync(CreateWriteLogWorkflow(WorkflowEventName.Created, "trigger.record-created", "bad-created-log", "Missing {{currentRecord.DoesNotExist}}."));
-            var product = new Product { Name = "Widget", Price = 9.99m, Quantity = 1 };
+            var todo = new Todo { Title = "Todo item", Description = "Initial todo", Status = "Open", Priority = 1 };
 
-            await product.SaveAsync();
+            await todo.SaveAsync();
 
-            Assert.NotNull(store.Find<Product>(Product.Metadata, product.Id));
+            Assert.NotNull(store.Find<Todo>(Todo.Metadata, todo.Id));
             Assert.Equal("Failed", await GetOnlyRunStatusAsync(context, WorkflowEventName.Created));
         }
         finally
@@ -158,7 +158,7 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
 
     private static async Task<MetaRecordDbContext> CreateConfiguredContextAsync(string dbPath)
     {
-        RegisterProductMetadata();
+        RegisterTodoMetadata();
         var context = new MetaRecordDbContext(dbPath);
         await context.Database.EnsureDeletedAsync();
         await context.Database.EnsureCreatedAsync();
@@ -168,15 +168,15 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
     private static EntityStore ConfigureRuntime(string dbPath, WorkflowRepository repository)
     {
         var store = new EntityStore(dbPath);
-        store.EnsureTableExists(Product.Metadata);
+        store.EnsureTableExists(Todo.Metadata);
         WorkflowRuntime.Configure(store, repository);
         return store;
     }
 
     private static WorkflowDefinition CreateBeforeSaveSetFieldWorkflow() => new()
     {
-        Name = "Set quantity before save",
-        ObjectName = "Product",
+        Name = "Set priority before save",
+        ObjectName = "Todo",
         EventName = WorkflowEventName.BeforeSave,
         IsEnabled = true,
         Nodes = new[]
@@ -184,7 +184,7 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
             Node("trigger-1", "trigger.before-save", "{}"),
             Node("set-1", "action.set-field", """
             {
-              "fieldName": "Quantity",
+              "fieldName": "Priority",
               "value": "25"
             }
             """)
@@ -197,8 +197,8 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
 
     private static WorkflowDefinition CreateBeforeSaveRejectWorkflow() => new()
     {
-        Name = "Reject product before save",
-        ObjectName = "Product",
+        Name = "Reject todo before save",
+        ObjectName = "Todo",
         EventName = WorkflowEventName.BeforeSave,
         IsEnabled = true,
         Nodes = new[]
@@ -206,7 +206,7 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
             Node("trigger-1", "trigger.before-save", "{}"),
             Node("reject-1", "action.reject-save", """
             {
-              "message": "Price {{currentRecord.Price}} is invalid."
+              "message": "Priority {{currentRecord.Priority}} is invalid."
             }
             """)
         },
@@ -223,7 +223,7 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
         string message) => new()
     {
         Name = name,
-        ObjectName = "Product",
+        ObjectName = "Todo",
         EventName = eventName,
         IsEnabled = true,
         Nodes = new[]
@@ -240,7 +240,7 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
     private static WorkflowDefinition CreateFieldChangedWorkflow(string fieldName, string message) => new()
     {
         Name = $"{fieldName} changed",
-        ObjectName = "Product",
+        ObjectName = "Todo",
         EventName = WorkflowEventName.FieldChanged,
         IsEnabled = true,
         Nodes = new[]
@@ -301,22 +301,23 @@ public sealed class ActiveRecordLifecycleTests : IDisposable
         return run.Status;
     }
 
-    private static void RegisterProductMetadata()
+    private static void RegisterTodoMetadata()
     {
         MetadataRegistry.Clear();
         MetadataRegistry.RegisterByName(new ObjectMetadata
         {
-            Name = "Product",
-            TableName = "Products",
+            Name = "Todo",
+            TableName = "Todos",
             Properties = new[]
             {
                 new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
-                new PropertyMetadata("Name", "Name", typeof(string), true),
-                new PropertyMetadata("Price", "Price", typeof(decimal), true),
-                new PropertyMetadata("Quantity", "Quantity", typeof(int), false)
+                new PropertyMetadata("Title", "Title", typeof(string), true),
+                new PropertyMetadata("Description", "Description", typeof(string), false),
+                new PropertyMetadata("Status", "Status", typeof(string), false),
+                new PropertyMetadata("Priority", "Priority", typeof(int), false)
             }
         });
-        MetadataRegistry.LinkType<Product>("Product");
+        MetadataRegistry.LinkType<Todo>("Todo");
     }
 
     private static string CreateTempDbPath() =>

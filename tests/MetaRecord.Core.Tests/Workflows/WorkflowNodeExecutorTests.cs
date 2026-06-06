@@ -21,18 +21,18 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
     }
 
     [Theory]
-    [InlineData("equals", "{ \"source\": \"currentRecord\", \"field\": \"Quantity\" }", "{ \"source\": \"literal\", \"value\": 5 }", "true")]
-    [InlineData("notEquals", "{ \"source\": \"currentRecord\", \"field\": \"Quantity\" }", "{ \"source\": \"literal\", \"value\": 3 }", "true")]
-    [InlineData("greaterThan", "{ \"source\": \"currentRecord\", \"field\": \"Quantity\" }", "{ \"source\": \"literal\", \"value\": 3 }", "true")]
-    [InlineData("greaterThanOrEqual", "{ \"source\": \"currentRecord\", \"field\": \"Quantity\" }", "{ \"source\": \"literal\", \"value\": 5 }", "true")]
-    [InlineData("lessThan", "{ \"source\": \"currentRecord\", \"field\": \"Quantity\" }", "{ \"source\": \"literal\", \"value\": 8 }", "true")]
-    [InlineData("lessThanOrEqual", "{ \"source\": \"currentRecord\", \"field\": \"Quantity\" }", "{ \"source\": \"literal\", \"value\": 5 }", "true")]
-    [InlineData("contains", "{ \"source\": \"currentRecord\", \"field\": \"Name\" }", "{ \"source\": \"literal\", \"value\": \"idg\" }", "true")]
-    [InlineData("startsWith", "{ \"source\": \"currentRecord\", \"field\": \"Name\" }", "{ \"source\": \"literal\", \"value\": \"Wid\" }", "true")]
-    [InlineData("endsWith", "{ \"source\": \"currentRecord\", \"field\": \"Name\" }", "{ \"source\": \"literal\", \"value\": \"get\" }", "true")]
-    [InlineData("isEmpty", "{ \"source\": \"currentRecord\", \"field\": \"Notes\" }", null, "true")]
-    [InlineData("isNotEmpty", "{ \"source\": \"currentRecord\", \"field\": \"Name\" }", null, "true")]
-    [InlineData("greaterThan", "{ \"source\": \"currentRecord\", \"field\": \"Quantity\" }", "{ \"source\": \"literal\", \"value\": 8 }", "false")]
+    [InlineData("equals", "{ \"source\": \"currentRecord\", \"field\": \"Priority\" }", "{ \"source\": \"literal\", \"value\": 5 }", "true")]
+    [InlineData("notEquals", "{ \"source\": \"currentRecord\", \"field\": \"Priority\" }", "{ \"source\": \"literal\", \"value\": 3 }", "true")]
+    [InlineData("greaterThan", "{ \"source\": \"currentRecord\", \"field\": \"Priority\" }", "{ \"source\": \"literal\", \"value\": 3 }", "true")]
+    [InlineData("greaterThanOrEqual", "{ \"source\": \"currentRecord\", \"field\": \"Priority\" }", "{ \"source\": \"literal\", \"value\": 5 }", "true")]
+    [InlineData("lessThan", "{ \"source\": \"currentRecord\", \"field\": \"Priority\" }", "{ \"source\": \"literal\", \"value\": 8 }", "true")]
+    [InlineData("lessThanOrEqual", "{ \"source\": \"currentRecord\", \"field\": \"Priority\" }", "{ \"source\": \"literal\", \"value\": 5 }", "true")]
+    [InlineData("contains", "{ \"source\": \"currentRecord\", \"field\": \"Title\" }", "{ \"source\": \"literal\", \"value\": \"odo\" }", "true")]
+    [InlineData("startsWith", "{ \"source\": \"currentRecord\", \"field\": \"Title\" }", "{ \"source\": \"literal\", \"value\": \"Tod\" }", "true")]
+    [InlineData("endsWith", "{ \"source\": \"currentRecord\", \"field\": \"Title\" }", "{ \"source\": \"literal\", \"value\": \"item\" }", "true")]
+    [InlineData("isEmpty", "{ \"source\": \"currentRecord\", \"field\": \"Description\" }", null, "true")]
+    [InlineData("isNotEmpty", "{ \"source\": \"currentRecord\", \"field\": \"Title\" }", null, "true")]
+    [InlineData("greaterThan", "{ \"source\": \"currentRecord\", \"field\": \"Priority\" }", "{ \"source\": \"literal\", \"value\": 8 }", "false")]
     public async Task ConditionNodeExecutor_selects_expected_branch(
         string operatorName,
         string leftOperandJson,
@@ -57,14 +57,14 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
 
         var result = await executor.ExecuteAsync(Node("set-1", "action.set-field", """
         {
-          "fieldName": "Quantity",
+              "fieldName": "Priority",
           "value": "12"
         }
         """), context);
 
         Assert.Equal(WorkflowRunStatus.Succeeded, result.Status);
         Assert.Contains("success", result.SelectedOutputPorts);
-        Assert.Equal(12, context.CurrentRecord["Quantity"]);
+            Assert.Equal(12, context.CurrentRecord["Priority"]);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
 
         var result = await executor.ExecuteAsync(Node("set-1", "action.set-field", """
         {
-          "fieldName": "Name",
+          "fieldName": "Title",
           "value": "Updated"
         }
         """), CreateContext(WorkflowEventName.Created));
@@ -90,13 +90,13 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
 
         var result = await executor.ExecuteAsync(Node("reject-1", "action.reject-save", """
         {
-          "message": "Price {{currentRecord.Price}} is invalid for {{currentRecord.Name}}."
+             "message": "Todo priority {{currentRecord.Priority}} is invalid for {{currentRecord.Title}}."
         }
         """), CreateContext(WorkflowEventName.BeforeSave));
 
         Assert.Equal(WorkflowRunStatus.Canceled, result.Status);
         Assert.Equal(WorkflowExecutionSignal.Reject, result.Signal);
-        Assert.Equal("Price 9.99 is invalid for Widget.", result.ErrorMessage);
+          Assert.Equal("Todo priority 5 is invalid for Todo item.", result.ErrorMessage);
     }
 
     [Fact]
@@ -106,14 +106,14 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
 
         var result = await executor.ExecuteAsync(Node("stop-1", "flow.stop", """
         {
-          "reason": "No more work for {{currentRecord.Name}}."
+             "reason": "No more work for {{currentRecord.Title}}."
         }
         """), CreateContext(WorkflowEventName.Created));
 
         Assert.Equal(WorkflowRunStatus.Succeeded, result.Status);
         Assert.Equal(WorkflowExecutionSignal.Stop, result.Signal);
         Assert.NotNull(result.OutputJson);
-        Assert.Contains("No more work for Widget.", result.OutputJson);
+          Assert.Contains("No more work for Todo item.", result.OutputJson);
     }
 
     [Fact]
@@ -121,14 +121,14 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
     {
         var executor = new WriteLogNodeExecutor();
 
-        var result = await executor.ExecuteAsync(WriteLogNode("log-1", "Created {{currentRecord.Name}}."), CreateContext(WorkflowEventName.Created));
+        var result = await executor.ExecuteAsync(WriteLogNode("log-1", "Created {{currentRecord.Title}}."), CreateContext(WorkflowEventName.Created));
 
         Assert.Equal(WorkflowRunStatus.Succeeded, result.Status);
         Assert.Contains("success", result.SelectedOutputPorts);
         Assert.NotNull(result.OutputJson);
         using var document = JsonDocument.Parse(result.OutputJson);
         Assert.Equal("Information", document.RootElement.GetProperty("severity").GetString());
-        Assert.Equal("Created Widget.", document.RootElement.GetProperty("message").GetString());
+            Assert.Equal("Created Todo item.", document.RootElement.GetProperty("message").GetString());
     }
 
     [Fact]
@@ -146,27 +146,27 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
     public async Task CreateRecordNodeExecutor_inserts_metadata_record_from_field_mappings()
     {
         var dbPath = CreateTempDbPath();
-        var productId = Guid.NewGuid();
+        var todoId = Guid.NewGuid();
 
         try
         {
             var store = new EntityStore(dbPath);
             var executor = new CreateRecordNodeExecutor(store);
 
-            var result = await executor.ExecuteAsync(Node("create-1", "action.create-record", """
-            {
-              "targetObjectName": "Task",
-              "fieldMappings": {
-                "Title": "Follow up for {{currentRecord.Name}}",
-                "RelatedProductId": "{{currentRecord.Id}}",
-                "Priority": "High"
-              }
-            }
-            """), CreateContext(WorkflowEventName.Created, productId));
+                        var result = await executor.ExecuteAsync(Node("create-1", "action.create-record", """
+                        {
+                            "targetObjectName": "Task",
+                            "fieldMappings": {
+                                "Title": "Follow up for {{currentRecord.Title}}",
+                                "RelatedTodoId": "{{currentRecord.Id}}",
+                                "Priority": "High"
+                            }
+                        }
+                        """), CreateContext(WorkflowEventName.Created, todoId));
 
             Assert.Equal(WorkflowRunStatus.Succeeded, result.Status);
             Assert.Contains("success", result.SelectedOutputPorts);
-            AssertCreatedTask(dbPath, productId);
+            AssertCreatedTask(dbPath, todoId);
         }
         finally
         {
@@ -201,29 +201,29 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
         Config = Json(configJson)
     };
 
-    private static WorkflowExecutionContext CreateContext(string eventName, Guid? productId = null)
+    private static WorkflowExecutionContext CreateContext(string eventName, Guid? todoId = null)
     {
-        var id = productId ?? Guid.NewGuid();
+        var id = todoId ?? Guid.NewGuid();
         return new WorkflowExecutionContext
         {
             WorkflowId = Guid.NewGuid(),
             WorkflowVersion = 1,
-            ObjectName = "Product",
+            ObjectName = "Todo",
             EventName = eventName,
             RecordId = id.ToString(),
             CurrentRecord = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Id"] = id,
-                ["Name"] = "Widget",
-                ["Price"] = 9.99m,
-                ["Quantity"] = 5,
-                ["Notes"] = ""
+                ["Title"] = "Todo item",
+                ["Description"] = "",
+                ["Status"] = "Open",
+                ["Priority"] = 5
             },
             OriginalRecord = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Quantity"] = 12
+                ["Priority"] = 12
             },
-            ChangedFields = new[] { "Quantity" }
+            ChangedFields = new[] { "Priority" }
         };
     }
 
@@ -234,14 +234,15 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
         MetadataRegistry.Clear();
         MetadataRegistry.RegisterByName(new ObjectMetadata
         {
-            Name = "Product",
-            TableName = "Products",
+            Name = "Todo",
+            TableName = "Todos",
             Properties = new[]
             {
                 new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
-                new PropertyMetadata("Name", "Name", typeof(string), true),
-                new PropertyMetadata("Price", "Price", typeof(decimal), true),
-                new PropertyMetadata("Quantity", "Quantity", typeof(int), false),
+                new PropertyMetadata("Title", "Title", typeof(string), true),
+                new PropertyMetadata("Description", "Description", typeof(string), false),
+                new PropertyMetadata("Status", "Status", typeof(string), false),
+                new PropertyMetadata("Priority", "Priority", typeof(int), false),
                 new PropertyMetadata("Notes", "Notes", typeof(string), false)
             }
         });
@@ -254,23 +255,23 @@ public sealed class WorkflowNodeExecutorTests : IDisposable
             {
                 new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
                 new PropertyMetadata("Title", "Title", typeof(string), true),
-                new PropertyMetadata("RelatedProductId", "RelatedProductId", typeof(Guid), false),
+                new PropertyMetadata("RelatedTodoId", "RelatedTodoId", typeof(Guid), false),
                 new PropertyMetadata("Priority", "Priority", typeof(string), false)
             }
         });
     }
 
-    private static void AssertCreatedTask(string dbPath, Guid productId)
+    private static void AssertCreatedTask(string dbPath, Guid todoId)
     {
         using var connection = new SqliteConnection($"Data Source={dbPath}");
         connection.Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Title, RelatedProductId, Priority FROM Tasks";
+        command.CommandText = "SELECT Title, RelatedTodoId, Priority FROM Tasks";
 
         using var reader = command.ExecuteReader();
         Assert.True(reader.Read());
-        Assert.Equal("Follow up for Widget", reader.GetString(0));
-        Assert.Equal(productId.ToString(), reader.GetString(1));
+        Assert.Equal("Follow up for Todo item", reader.GetString(0));
+        Assert.Equal(todoId.ToString(), reader.GetString(1));
         Assert.Equal("High", reader.GetString(2));
         Assert.False(reader.Read());
     }

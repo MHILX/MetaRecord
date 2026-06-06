@@ -1,4 +1,4 @@
-import { CheckCircle2, Power, PowerOff, Save, Workflow as WorkflowIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, Maximize2, Power, PowerOff, Save, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, workflowApi } from '../api/client';
 import type {
@@ -20,7 +20,7 @@ import { ValidationPanel } from './ValidationPanel';
 import { WorkflowCanvas } from './WorkflowCanvas';
 import { WorkflowList } from './WorkflowList';
 import { demoDomain } from './demoDomain';
-import { createNodeDraft, createWorkflowDraft } from './workflowModel';
+import { createNodeDraft, createSampleRecordValues, createWorkflowDraft, getObject } from './workflowModel';
 
 type NoticeKind = 'info' | 'error';
 
@@ -28,6 +28,26 @@ type NoticeState = {
   message: string;
   kind: NoticeKind;
 };
+
+type LeftRailTab = 'workflows' | 'metadata' | 'palette';
+
+type BottomRailTab = 'validation' | 'test' | 'history';
+
+const leftRailTabs: Array<{ id: LeftRailTab; label: string }> = [
+  { id: 'workflows', label: 'Workflows' },
+  { id: 'metadata', label: 'Metadata' },
+  { id: 'palette', label: 'Node Palette' }
+];
+
+const bottomRailTabs: Array<{ id: BottomRailTab; label: string }> = [
+  { id: 'validation', label: 'Validation' },
+  { id: 'test', label: 'Test Run' },
+  { id: 'history', label: 'Run History' }
+];
+
+function getBottomRailTabLabel(tab: BottomRailTab): string {
+  return bottomRailTabs.find(candidate => candidate.id === tab)?.label ?? 'Panel';
+}
 
 export function WorkflowEditor() {
   const preferredDemoWorkflowName = demoDomain.preferredWorkflowName;
@@ -41,10 +61,15 @@ export function WorkflowEditor() {
   const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
   const [selectedRun, setSelectedRun] = useState<WorkflowRunDetail | null>(null);
   const [testResult, setTestResult] = useState<WorkflowTestRunResponse | null>(null);
+  const [testInputValues, setTestInputValues] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [leftRailTab, setLeftRailTab] = useState<LeftRailTab>('workflows');
+  const [bottomRailTab, setBottomRailTab] = useState<BottomRailTab>('validation');
+  const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false);
+  const [isBottomRailDialogOpen, setIsBottomRailDialogOpen] = useState(false);
 
   const selectedWorkflowIsSaved = useMemo(
     () => Boolean(selectedWorkflow && savedWorkflowIds.has(selectedWorkflow.id)),
@@ -62,6 +87,29 @@ export function WorkflowEditor() {
     const timeoutId = window.setTimeout(() => setNotice(null), 2500);
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
+
+  useEffect(() => {
+    if (!selectedWorkflow) {
+      setTestInputValues({});
+      return;
+    }
+
+    const metadata = getObject(metadataObjects, selectedWorkflow.objectName);
+    setTestInputValues(metadata ? createSampleRecordValues(metadata) : {});
+  }, [metadataObjects, selectedWorkflow?.objectName]);
+
+  useEffect(() => {
+    if (!isBottomRailDialogOpen)
+      return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape')
+        setIsBottomRailDialogOpen(false);
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isBottomRailDialogOpen]);
 
   function showNotice(message: string, kind: NoticeKind = 'info') {
     setNotice({ message, kind });
@@ -281,6 +329,16 @@ export function WorkflowEditor() {
         )}
 
         <div className="toolbar-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setIsInspectorCollapsed(current => !current)}
+            aria-pressed={isInspectorCollapsed}
+            aria-controls="property-inspector"
+          >
+            {isInspectorCollapsed ? <ChevronLeft size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+            {isInspectorCollapsed ? 'Show Inspector' : 'Hide Inspector'}
+          </button>
           <button className="secondary-button" type="button" onClick={saveSelectedWorkflow} disabled={!selectedWorkflow || isSaving}>
             <Save size={16} aria-hidden="true" />
             Save
@@ -302,24 +360,49 @@ export function WorkflowEditor() {
 
       {notice && <div className="notice-bar">{notice.message}</div>}
 
-      <div className="editor-layout">
+      <div className={isInspectorCollapsed ? 'editor-layout inspector-collapsed' : 'editor-layout'}>
         <aside className="left-rail">
-          <WorkflowList
-            workflows={workflows}
-            metadataObjects={metadataObjects}
-            selectedWorkflowId={selectedWorkflow?.id}
-            onOpenWorkflow={openWorkflow}
-            onCreateWorkflow={createWorkflow}
-            onRefresh={loadInitialData}
-          />
-          <MetadataManager
-            metadataObjects={metadataObjects}
-            isLoading={isLoading}
-            onMetadataObjectsChange={setMetadataObjects}
-            onRefreshMetadata={reloadMetadataObjects}
-            onNotice={showNotice}
-          />
-          <NodePalette workflow={selectedWorkflow} nodeTypes={nodeTypes} onAddNode={addNode} />
+          <div className="rail-tabs" role="tablist" aria-label="Editor panels">
+            {leftRailTabs.map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={leftRailTab === tab.id}
+                className={leftRailTab === tab.id ? 'rail-tab active' : 'rail-tab'}
+                onClick={() => setLeftRailTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="left-rail-panel-stack">
+            <div className={leftRailTab === 'workflows' ? 'left-rail-panel active' : 'left-rail-panel'} role="tabpanel">
+              <WorkflowList
+                workflows={workflows}
+                metadataObjects={metadataObjects}
+                selectedWorkflowId={selectedWorkflow?.id}
+                onOpenWorkflow={openWorkflow}
+                onCreateWorkflow={createWorkflow}
+                onRefresh={loadInitialData}
+              />
+            </div>
+
+            <div className={leftRailTab === 'metadata' ? 'left-rail-panel active' : 'left-rail-panel'} role="tabpanel">
+              <MetadataManager
+                metadataObjects={metadataObjects}
+                isLoading={isLoading}
+                onMetadataObjectsChange={setMetadataObjects}
+                onRefreshMetadata={reloadMetadataObjects}
+                onNotice={showNotice}
+              />
+            </div>
+
+            <div className={leftRailTab === 'palette' ? 'left-rail-panel active' : 'left-rail-panel'} role="tabpanel">
+              <NodePalette workflow={selectedWorkflow} nodeTypes={nodeTypes} onAddNode={addNode} />
+            </div>
+          </div>
         </aside>
 
         <section className="canvas-column">
@@ -342,29 +425,152 @@ export function WorkflowEditor() {
           )}
         </section>
 
-        <aside className="right-rail">
-          <PropertyInspector
-            workflow={selectedWorkflow}
-            nodeTypes={nodeTypes}
-            metadataObjects={metadataObjects}
-            validationIssues={validationIssues}
-            selectedNodeId={selectedNodeId}
-            onWorkflowChange={setSelectedWorkflow}
-          />
+        <aside className="right-rail" aria-hidden={isInspectorCollapsed}>
+          {!isInspectorCollapsed && (
+            <PropertyInspector
+              workflow={selectedWorkflow}
+              nodeTypes={nodeTypes}
+              metadataObjects={metadataObjects}
+              validationIssues={validationIssues}
+              selectedNodeId={selectedNodeId}
+              onWorkflowChange={setSelectedWorkflow}
+            />
+          )}
         </aside>
       </div>
 
       <footer className="bottom-rail">
-        <ValidationPanel issues={validationIssues} onSelectNode={setSelectedNodeId} />
-        <TestRunPanel
-          workflow={selectedWorkflow}
-          metadataObjects={metadataObjects}
-          testResult={testResult}
-          isRunning={isRunning}
-          onRun={runTest}
-        />
-        <RunHistoryPanel runs={runs} selectedRun={selectedRun} onSelectRun={selectRun} />
+        <div className="bottom-rail-toolbar">
+          <div className="rail-tabs bottom-rail-tabs" role="tablist" aria-label="Run panels">
+            {bottomRailTabs.map(tab => (
+              <button
+                key={tab.id}
+                id={`bottom-rail-tab-${tab.id}`}
+                type="button"
+                role="tab"
+                aria-selected={bottomRailTab === tab.id}
+                aria-controls={`bottom-rail-panel-${tab.id}`}
+                className={bottomRailTab === tab.id ? 'rail-tab active' : 'rail-tab'}
+                onClick={() => setBottomRailTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <button
+            className="secondary-button bottom-rail-popout-button"
+            type="button"
+            onClick={() => setIsBottomRailDialogOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={isBottomRailDialogOpen}
+          >
+            <Maximize2 size={16} aria-hidden="true" />
+            Expand
+          </button>
+        </div>
+
+        <div className="bottom-rail-panels">
+          <div
+            id="bottom-rail-panel-validation"
+            role="tabpanel"
+            aria-labelledby="bottom-rail-tab-validation"
+            aria-hidden={bottomRailTab !== 'validation'}
+            className={bottomRailTab === 'validation' ? 'bottom-rail-panel active' : 'bottom-rail-panel'}
+          >
+            <ValidationPanel issues={validationIssues} onSelectNode={setSelectedNodeId} />
+          </div>
+
+          <div
+            id="bottom-rail-panel-test"
+            role="tabpanel"
+            aria-labelledby="bottom-rail-tab-test"
+            aria-hidden={bottomRailTab !== 'test'}
+            className={bottomRailTab === 'test' ? 'bottom-rail-panel active' : 'bottom-rail-panel'}
+          >
+            <TestRunPanel
+              workflow={selectedWorkflow}
+              metadataObjects={metadataObjects}
+              values={testInputValues}
+              onValuesChange={setTestInputValues}
+              testResult={testResult}
+              isRunning={isRunning}
+              onRun={runTest}
+            />
+          </div>
+
+          <div
+            id="bottom-rail-panel-history"
+            role="tabpanel"
+            aria-labelledby="bottom-rail-tab-history"
+            aria-hidden={bottomRailTab !== 'history'}
+            className={bottomRailTab === 'history' ? 'bottom-rail-panel active' : 'bottom-rail-panel'}
+          >
+            <RunHistoryPanel runs={runs} selectedRun={selectedRun} onSelectRun={selectRun} />
+          </div>
+        </div>
       </footer>
+
+      {isBottomRailDialogOpen && (
+        <div className="panel-dialog-overlay" role="presentation" onClick={() => setIsBottomRailDialogOpen(false)}>
+          <section
+            className="panel-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bottom-rail-dialog-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="panel-dialog-header">
+              <div>
+                <span>Expanded bottom rail</span>
+                <h2 id="bottom-rail-dialog-title">{getBottomRailTabLabel(bottomRailTab)}</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setIsBottomRailDialogOpen(false)} aria-label="Close popout">
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="rail-tabs bottom-rail-tabs panel-dialog-tabs" role="tablist" aria-label="Expanded run panels">
+              {bottomRailTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  id={`bottom-rail-dialog-tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={bottomRailTab === tab.id}
+                  aria-controls={`bottom-rail-dialog-panel-${tab.id}`}
+                  className={bottomRailTab === tab.id ? 'rail-tab active' : 'rail-tab'}
+                  onClick={() => setBottomRailTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="panel-dialog-body">
+              {bottomRailTab === 'validation' && (
+                <ValidationPanel issues={validationIssues} onSelectNode={setSelectedNodeId} />
+              )}
+
+              {bottomRailTab === 'test' && (
+                <TestRunPanel
+                  workflow={selectedWorkflow}
+                  metadataObjects={metadataObjects}
+                  values={testInputValues}
+                  onValuesChange={setTestInputValues}
+                  testResult={testResult}
+                  isRunning={isRunning}
+                  onRun={runTest}
+                />
+              )}
+
+              {bottomRailTab === 'history' && (
+                <RunHistoryPanel runs={runs} selectedRun={selectedRun} onSelectRun={selectRun} />
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

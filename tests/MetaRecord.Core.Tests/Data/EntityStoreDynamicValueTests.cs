@@ -17,7 +17,7 @@ public sealed class EntityStoreDynamicValueTests : IDisposable
     public void InsertValues_and_FindValues_round_trip_clr_compatible_values()
     {
         var store = new EntityStore(_dbPath);
-        var metadata = CreateProductMetadata();
+        var metadata = CreateTodoMetadata();
         var id = Guid.NewGuid();
         var createdAt = new DateTime(2026, 4, 28, 12, 30, 0, DateTimeKind.Utc);
 
@@ -25,9 +25,9 @@ public sealed class EntityStoreDynamicValueTests : IDisposable
         store.InsertValues(metadata, new Dictionary<string, object?>
         {
             ["Id"] = id,
-            ["Name"] = "Widget",
-            ["Price"] = 9.99m,
-            ["Quantity"] = 5,
+            ["Title"] = "Todo item",
+            ["Description"] = "Sample todo",
+            ["Priority"] = 5,
             ["IsActive"] = true,
             ["CreatedAt"] = createdAt
         });
@@ -35,9 +35,9 @@ public sealed class EntityStoreDynamicValueTests : IDisposable
         var values = store.FindValues(metadata, id);
 
         Assert.Equal(id, values["Id"]);
-        Assert.Equal("Widget", values["Name"]);
-        Assert.Equal(9.99m, values["Price"]);
-        Assert.Equal(5, values["Quantity"]);
+        Assert.Equal("Todo item", values["Title"]);
+        Assert.Equal("Sample todo", values["Description"]);
+        Assert.Equal(5, values["Priority"]);
         Assert.Equal(true, values["IsActive"]);
         Assert.Equal(createdAt, values["CreatedAt"]);
     }
@@ -46,30 +46,30 @@ public sealed class EntityStoreDynamicValueTests : IDisposable
     public void UpdateValues_updates_subset_without_overwriting_omitted_fields()
     {
         var store = new EntityStore(_dbPath);
-        var metadata = CreateProductMetadata();
+        var metadata = CreateTodoMetadata();
         var id = Guid.NewGuid();
 
         store.EnsureTableExists(metadata);
         store.InsertValues(metadata, new Dictionary<string, object?>
         {
             ["Id"] = id,
-            ["Name"] = "Widget",
-            ["Price"] = 9.99m,
-            ["Quantity"] = 5,
+            ["Title"] = "Todo item",
+            ["Description"] = "Sample todo",
+            ["Priority"] = 5,
             ["IsActive"] = true,
             ["CreatedAt"] = new DateTime(2026, 4, 28, 12, 30, 0, DateTimeKind.Utc)
         });
 
         store.UpdateValues(metadata, id, new Dictionary<string, object?>
         {
-            ["Price"] = 15.50m,
-            ["Quantity"] = 7
+            ["Priority"] = 7,
+            ["Description"] = "Updated todo"
         });
 
         var values = store.FindValues(metadata, id);
-        Assert.Equal("Widget", values["Name"]);
-        Assert.Equal(15.50m, values["Price"]);
-        Assert.Equal(7, values["Quantity"]);
+        Assert.Equal("Todo item", values["Title"]);
+        Assert.Equal("Updated todo", values["Description"]);
+        Assert.Equal(7, values["Priority"]);
         Assert.Equal(true, values["IsActive"]);
     }
 
@@ -113,7 +113,7 @@ public sealed class EntityStoreDynamicValueTests : IDisposable
     public void Dynamic_apis_reject_unknown_fields()
     {
         var store = new EntityStore(_dbPath);
-        var metadata = CreateProductMetadata();
+        var metadata = CreateTodoMetadata();
 
         store.EnsureTableExists(metadata);
 
@@ -129,7 +129,7 @@ public sealed class EntityStoreDynamicValueTests : IDisposable
     public void FindValues_returns_empty_dictionary_when_record_is_missing()
     {
         var store = new EntityStore(_dbPath);
-        var metadata = CreateProductMetadata();
+        var metadata = CreateTodoMetadata();
 
         store.EnsureTableExists(metadata);
 
@@ -142,44 +142,47 @@ public sealed class EntityStoreDynamicValueTests : IDisposable
     public void Generic_insert_update_and_find_still_work()
     {
         var store = new EntityStore(_dbPath);
-        var metadata = CreateProductMetadata();
-        var product = new Product
+        var metadata = CreateTodoMetadata();
+        var todo = new Todo
         {
-            Name = "Widget",
-            Price = 9.99m,
-            Quantity = 5
+            Title = "Todo item",
+            Description = "Initial todo",
+            Status = "Open",
+            Priority = 5
         };
 
         store.EnsureTableExists(metadata);
-        store.Insert(product, metadata);
+        store.Insert(todo, metadata);
 
-        var inserted = store.Find<Product>(metadata, product.Id);
+        var inserted = store.Find<Todo>(metadata, todo.Id);
         Assert.NotNull(inserted);
-        Assert.Equal("Widget", inserted.Name);
-        Assert.Equal(9.99m, inserted.Price);
-        Assert.Equal(5, inserted.Quantity);
+        Assert.Equal("Todo item", inserted.Title);
+        Assert.Equal("Initial todo", inserted.Description);
+        Assert.Equal("Open", inserted.Status);
+        Assert.Equal(5, inserted.Priority);
 
-        product.Price = 12.25m;
-        product.Quantity = 8;
-        store.Update(product, metadata, product.Id);
+        todo.Description = "Updated todo";
+        todo.Priority = 8;
+        store.Update(todo, metadata, todo.Id);
 
-        var updated = store.Find<Product>(metadata, product.Id);
+        var updated = store.Find<Todo>(metadata, todo.Id);
         Assert.NotNull(updated);
-        Assert.Equal("Widget", updated.Name);
-        Assert.Equal(12.25m, updated.Price);
-        Assert.Equal(8, updated.Quantity);
+        Assert.Equal("Todo item", updated.Title);
+        Assert.Equal("Updated todo", updated.Description);
+        Assert.Equal("Open", updated.Status);
+        Assert.Equal(8, updated.Priority);
     }
 
-    private static ObjectMetadata CreateProductMetadata() => new()
+    private static ObjectMetadata CreateTodoMetadata() => new()
     {
-        Name = "Product",
-        TableName = "Products",
+        Name = "Todo",
+        TableName = "Todos",
         Properties = new[]
         {
             new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
-            new PropertyMetadata("Name", "Name", typeof(string), true),
-            new PropertyMetadata("Price", "Price", typeof(decimal), true),
-            new PropertyMetadata("Quantity", "Quantity", typeof(int), false),
+            new PropertyMetadata("Title", "Title", typeof(string), true),
+            new PropertyMetadata("Description", "Description", typeof(string), false),
+            new PropertyMetadata("Priority", "Priority", typeof(int), false),
             new PropertyMetadata("IsActive", "IsActive", typeof(bool), false),
             new PropertyMetadata("CreatedAt", "CreatedAt", typeof(DateTime), false)
         }

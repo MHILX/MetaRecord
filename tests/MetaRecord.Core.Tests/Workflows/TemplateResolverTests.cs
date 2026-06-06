@@ -14,10 +14,10 @@ public sealed class TemplateResolverTests
         context.Variables["Status"] = "ready";
 
         var result = WorkflowValueResolver.ResolveTemplate(
-            "{{currentRecord.Name}} changed from {{originalRecord.Quantity}} to {{currentRecord.Quantity}} during {{event.EventName}} and is {{variable.Status}}.",
+            "{{currentRecord.Title}} changed from {{originalRecord.Priority}} to {{currentRecord.Priority}} during {{event.EventName}} and is {{variable.Status}}.",
             context);
 
-        Assert.Equal("Widget changed from 12 to 5 during FieldChanged and is ready.", result);
+        Assert.Equal("Todo item changed from 12 to 5 during FieldChanged and is ready.", result);
     }
 
     [Fact]
@@ -82,11 +82,11 @@ public sealed class TemplateResolverTests
         var value = WorkflowValueResolver.ResolveOperand(Json("""
         {
           "source": "CURRENTRECORD",
-          "field": "Name"
+                    "field": "Title"
         }
         """), CreateContext());
 
-        Assert.Equal("Widget", value);
+                Assert.Equal("Todo item", value);
     }
 
     private static WorkflowExecutionContext CreateContext()
@@ -96,20 +96,21 @@ public sealed class TemplateResolverTests
         {
             WorkflowId = Guid.NewGuid(),
             WorkflowVersion = 1,
-            ObjectName = "Product",
+            ObjectName = "Todo",
             EventName = "FieldChanged",
             RecordId = recordId.ToString(),
             CurrentRecord = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Id"] = recordId,
-                ["Name"] = "Widget",
-                ["Quantity"] = 5
+                ["Title"] = "Todo item",
+                ["Priority"] = 5,
+                ["Description"] = ""
             },
             OriginalRecord = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Quantity"] = 12
+                ["Priority"] = 12
             },
-            ChangedFields = new[] { "Quantity" }
+            ChangedFields = new[] { "Priority" }
         };
     }
 

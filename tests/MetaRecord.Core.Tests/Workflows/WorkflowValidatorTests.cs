@@ -40,11 +40,11 @@ public sealed class WorkflowValidatorTests : IDisposable
     [Fact]
     public void Validate_rejects_missing_metadata_object()
     {
-        var workflow = CreateBeforeSaveWorkflow(objectName: "MissingProduct");
+        var workflow = CreateBeforeSaveWorkflow(objectName: "MissingTodo");
 
         var issues = Validate(workflow);
 
-        AssertContainsError(issues, "Object 'MissingProduct' does not exist in metadata", field: "objectName");
+        AssertContainsError(issues, "Object 'MissingTodo' does not exist in metadata", field: "objectName");
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public sealed class WorkflowValidatorTests : IDisposable
 
         var issues = Validate(workflow);
 
-        AssertContainsError(issues, "Field 'MissingField' does not exist on object 'Product'", "condition-1", "config.condition.left.field");
+        AssertContainsError(issues, "Field 'MissingField' does not exist on object 'Todo'", "condition-1", "config.condition.left.field");
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public sealed class WorkflowValidatorTests : IDisposable
         var workflow = new WorkflowDefinition
         {
             Name = "Unknown node type",
-            ObjectName = "Product",
+            ObjectName = "Todo",
             EventName = WorkflowEventName.BeforeSave,
             Nodes = new[]
             {
@@ -86,7 +86,7 @@ public sealed class WorkflowValidatorTests : IDisposable
         var workflow = new WorkflowDefinition
         {
             Name = "Trigger mismatch",
-            ObjectName = "Product",
+            ObjectName = "Todo",
             EventName = WorkflowEventName.Created,
             Nodes = new[]
             {
@@ -94,7 +94,7 @@ public sealed class WorkflowValidatorTests : IDisposable
                 Node("log-1", "action.write-log", """
                 {
                   "severity": "Information",
-                  "message": "Created {{currentRecord.Name}}"
+                                    "message": "Created {{currentRecord.Title}}"
                 }
                 """)
             },
@@ -123,7 +123,7 @@ public sealed class WorkflowValidatorTests : IDisposable
         var workflow = new WorkflowDefinition
         {
             Name = "Cycle",
-            ObjectName = "Product",
+            ObjectName = "Todo",
             EventName = WorkflowEventName.FieldChanged,
             Nodes = new[]
             {
@@ -158,14 +158,14 @@ public sealed class WorkflowValidatorTests : IDisposable
         var workflow = new WorkflowDefinition
         {
             Name = "Set field after save",
-            ObjectName = "Product",
+            ObjectName = "Todo",
             EventName = WorkflowEventName.FieldChanged,
             Nodes = new[]
             {
-                Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Quantity\" }"),
+                                Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Status\" }"),
                 Node("set-field-1", "action.set-field", """
                 {
-                  "fieldName": "Name",
+                                    "fieldName": "Title",
                   "value": "Updated"
                 }
                 """)
@@ -184,13 +184,13 @@ public sealed class WorkflowValidatorTests : IDisposable
         new WorkflowValidator().Validate(workflow);
 
     private static WorkflowDefinition CreateBeforeSaveWorkflow(
-        string objectName = "Product",
-        string conditionField = "Price",
+        string objectName = "Todo",
+        string conditionField = "Title",
         string edgeFromPort = "success")
     {
         return new WorkflowDefinition
         {
-            Name = "Reject invalid product price",
+            Name = "Reject empty todo title",
             ObjectName = objectName,
             EventName = WorkflowEventName.BeforeSave,
             Nodes = new[]
@@ -199,7 +199,7 @@ public sealed class WorkflowValidatorTests : IDisposable
                 ConditionNode("condition-1", conditionField),
                 Node("reject-1", "action.reject-save", """
                 {
-                  "message": "Price must be greater than zero."
+                                    "message": "Todo title is required."
                 }
                 """)
             },
@@ -215,8 +215,8 @@ public sealed class WorkflowValidatorTests : IDisposable
     {
         var nodes = new List<WorkflowNode>
         {
-            Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Quantity\" }"),
-            ConditionNode("condition-1", "Quantity"),
+            Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Status\" }"),
+            ConditionNode("condition-1", "Status"),
             WriteLogNode("log-1")
         };
 
@@ -225,8 +225,8 @@ public sealed class WorkflowValidatorTests : IDisposable
 
         return new WorkflowDefinition
         {
-            Name = "Log low inventory",
-            ObjectName = "Product",
+            Name = "Log todo status changes",
+            ObjectName = "Todo",
             EventName = WorkflowEventName.FieldChanged,
             Nodes = nodes,
             Edges = new[]
@@ -241,8 +241,8 @@ public sealed class WorkflowValidatorTests : IDisposable
     {
       "condition": {
         "left": { "source": "currentRecord", "field": "{{fieldName}}" },
-        "operator": "lessThanOrEqual",
-        "right": { "source": "literal", "value": 0 }
+                "operator": "equals",
+                "right": { "source": "literal", "value": "Done" }
       }
     }
     """);
@@ -250,7 +250,7 @@ public sealed class WorkflowValidatorTests : IDisposable
     private static WorkflowNode WriteLogNode(string id) => Node(id, "action.write-log", """
     {
       "severity": "Information",
-      "message": "Product {{currentRecord.Name}} changed."
+            "message": "Todo {{currentRecord.Title}} changed."
     }
     """);
 
@@ -282,14 +282,15 @@ public sealed class WorkflowValidatorTests : IDisposable
         MetadataRegistry.Clear();
         MetadataRegistry.RegisterByName(new ObjectMetadata
         {
-            Name = "Product",
-            TableName = "Products",
+            Name = "Todo",
+            TableName = "Todos",
             Properties = new[]
             {
                 new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
-                new PropertyMetadata("Name", "Name", typeof(string), true),
-                new PropertyMetadata("Price", "Price", typeof(decimal), true),
-                new PropertyMetadata("Quantity", "Quantity", typeof(int), false)
+                new PropertyMetadata("Title", "Title", typeof(string), true),
+                new PropertyMetadata("Description", "Description", typeof(string), false),
+                new PropertyMetadata("Status", "Status", typeof(string), true),
+                new PropertyMetadata("Priority", "Priority", typeof(int), false)
             }
         });
 
@@ -301,7 +302,7 @@ public sealed class WorkflowValidatorTests : IDisposable
             {
                 new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
                 new PropertyMetadata("Title", "Title", typeof(string), true),
-                new PropertyMetadata("RelatedProductId", "RelatedProductId", typeof(Guid), false),
+                new PropertyMetadata("RelatedTodoId", "RelatedTodoId", typeof(Guid), false),
                 new PropertyMetadata("Priority", "Priority", typeof(string), false)
             }
         });

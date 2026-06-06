@@ -44,7 +44,7 @@ export function PropertyInspector({
 }: PropertyInspectorProps) {
   if (!workflow) {
     return (
-      <section className="panel inspector-panel">
+      <section className="panel inspector-panel" id="property-inspector">
         <h2>Inspector</h2>
         <p className="muted">Open or create a workflow to configure nodes.</p>
       </section>
@@ -57,7 +57,7 @@ export function PropertyInspector({
 
   if (!selectedNode || !selectedNodeType) {
     return (
-      <section className="panel inspector-panel">
+      <section className="panel inspector-panel" id="property-inspector">
         <h2>Inspector</h2>
         <p className="muted">Select a node to edit its configuration.</p>
       </section>
@@ -82,7 +82,7 @@ export function PropertyInspector({
   }
 
   return (
-    <section className="panel inspector-panel">
+    <section className="panel inspector-panel" id="property-inspector">
       <div className="panel-heading">
         <h2>Inspector</h2>
         <Settings2 size={17} aria-hidden="true" />

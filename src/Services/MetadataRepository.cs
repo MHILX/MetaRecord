@@ -23,6 +23,7 @@ public class MetadataRepository
     public async Task<IEnumerable<IObjectMetadata>> LoadAllMetadataAsync()
     {
         var entities = await _context.ObjectDefinitions
+            .AsNoTracking()
             .Include(o => o.Properties.OrderBy(p => p.SortOrder))
             .ToListAsync();
 
@@ -35,6 +36,7 @@ public class MetadataRepository
     public async Task<IObjectMetadata?> GetByNameAsync(string name)
     {
         var entity = await _context.ObjectDefinitions
+            .AsNoTracking()
             .Include(o => o.Properties.OrderBy(p => p.SortOrder))
             .FirstOrDefaultAsync(o => o.Name == name);
 
@@ -47,6 +49,7 @@ public class MetadataRepository
     public async Task<IObjectMetadata?> GetByIdAsync(Guid id)
     {
         var entity = await _context.ObjectDefinitions
+            .AsNoTracking()
             .Include(o => o.Properties.OrderBy(p => p.SortOrder))
             .FirstOrDefaultAsync(o => o.Id == id);
 
@@ -64,21 +67,17 @@ public class MetadataRepository
 
         if (existing != null)
         {
-            // Update existing
-            existing.Name = metadata.Name;
-            existing.TableName = metadata.TableName;
-            existing.DateModified = DateTime.UtcNow;
-
-            // Remove old properties and add new ones
+            // Replace the existing definition so EF does not have to reconcile tracked child rows.
+            existing.Properties.Clear();
             _context.PropertyDefinitions.RemoveRange(existing.Properties);
-            existing.Properties = metadata.Properties.Select((p, i) => ToPropertyEntity(p, metadata.Id, i)).ToList();
+            _context.ObjectDefinitions.Remove(existing);
+            await _context.SaveChangesAsync();
+            _context.ChangeTracker.Clear();
         }
-        else
-        {
-            // Insert new
-            var entity = ToObjectDefinitionEntity(metadata);
-            _context.ObjectDefinitions.Add(entity);
-        }
+
+        // Insert the replacement or new definition.
+        var entity = ToObjectDefinitionEntity(metadata);
+        _context.ObjectDefinitions.Add(entity);
 
         // Bump metadata version
         _context.MetadataVersions.Add(new MetadataVersionEntity());

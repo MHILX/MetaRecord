@@ -23,8 +23,8 @@ public sealed class WorkflowRepositoryTests
             var loaded = await repository.GetDefinitionAsync(workflow.Id);
             Assert.NotNull(loaded);
             Assert.Equal(workflow.Id, loaded.Id);
-            Assert.Equal("Reject invalid product price", loaded.Name);
-            Assert.Equal("Product", loaded.ObjectName);
+            Assert.Equal("Reject empty todo title", loaded.Name);
+            Assert.Equal("Todo", loaded.ObjectName);
             Assert.Equal(WorkflowEventName.BeforeSave, loaded.EventName);
             Assert.True(loaded.IsEnabled);
             Assert.Equal(1, loaded.Version);
@@ -33,7 +33,7 @@ public sealed class WorkflowRepositoryTests
 
             var logNode = Assert.Single(loaded.Nodes, node => node.Id == "log-1");
             Assert.True(logNode.Config.TryGetProperty("message", out var message));
-            Assert.Equal("Product {{currentRecord.Name}} saved.", message.GetString());
+            Assert.Equal("Todo {{currentRecord.Title}} saved.", message.GetString());
         }
         finally
         {
@@ -57,7 +57,7 @@ public sealed class WorkflowRepositoryTests
             await repository.SaveDefinitionAsync(disabled);
             await repository.SaveDefinitionAsync(otherEvent);
 
-            var enabled = await repository.GetEnabledDefinitionsAsync("Product", WorkflowEventName.FieldChanged);
+            var enabled = await repository.GetEnabledDefinitionsAsync("Todo", WorkflowEventName.FieldChanged);
 
             var workflow = Assert.Single(enabled);
             Assert.Equal(matching.Id, workflow.Id);
@@ -168,8 +168,8 @@ public sealed class WorkflowRepositoryTests
     {
         return new WorkflowDefinition
         {
-            Name = "Reject invalid product price",
-            ObjectName = "Product",
+                        Name = "Reject empty todo title",
+                        ObjectName = "Todo",
             EventName = WorkflowEventName.BeforeSave,
             IsEnabled = isEnabled,
             Version = 1,
@@ -179,7 +179,7 @@ public sealed class WorkflowRepositoryTests
                 Node("log-1", "action.write-log", """
                 {
                   "severity": "Information",
-                  "message": "Product {{currentRecord.Name}} saved."
+                                    "message": "Todo {{currentRecord.Title}} saved."
                 }
                 """)
             },
@@ -195,17 +195,17 @@ public sealed class WorkflowRepositoryTests
         return new WorkflowDefinition
         {
             Name = name,
-            ObjectName = "Product",
+                        ObjectName = "Todo",
             EventName = WorkflowEventName.FieldChanged,
             IsEnabled = isEnabled,
             Version = 1,
             Nodes = new[]
             {
-                Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Quantity\" }"),
+                                Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Status\" }"),
                 Node("log-1", "action.write-log", """
                 {
                   "severity": "Information",
-                  "message": "Quantity changed for {{currentRecord.Name}}."
+                                    "message": "Status changed for {{currentRecord.Title}}."
                 }
                 """)
             },

@@ -23,11 +23,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    let details: unknown;
-    try {
-      details = await response.json();
-    } catch {
-      details = await response.text();
+    const bodyText = await response.text();
+    let details: unknown = bodyText;
+
+    if (bodyText.length > 0) {
+      try {
+        details = JSON.parse(bodyText) as unknown;
+      } catch {
+        details = bodyText;
+      }
     }
 
     const error = new ApiError(response.status, response.statusText, details);

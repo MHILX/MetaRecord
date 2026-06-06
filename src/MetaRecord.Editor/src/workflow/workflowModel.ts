@@ -62,6 +62,25 @@ export function createNodeDraft(
   };
 }
 
+export function createSampleRecordValues(metadata: ObjectMetadata): Record<string, string> {
+  const values: Record<string, string> = {};
+
+  for (const property of metadata.properties) {
+    if (property.clrType === 'Guid')
+      values[property.name] = crypto.randomUUID();
+    else if (property.clrType === 'Decimal')
+      values[property.name] = '9.99';
+    else if (property.clrType === 'Int32')
+      values[property.name] = '5';
+    else if (property.clrType === 'Boolean')
+      values[property.name] = 'true';
+    else
+      values[property.name] = `Sample ${metadata.name}`;
+  }
+
+  return values;
+}
+
 export function createDefaultConfig(
   nodeType: WorkflowNodeType,
   workflowObjectName: string,

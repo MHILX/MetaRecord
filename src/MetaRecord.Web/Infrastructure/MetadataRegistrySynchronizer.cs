@@ -12,7 +12,6 @@ internal static class MetadataRegistrySynchronizer
         var metadata = (await repository.LoadAllMetadataAsync()).ToList();
         MetadataRegistry.ReplaceAll(metadata);
         MetadataRegistry.LinkType<Todo>(DemoDomain.ObjectName);
-        MetadataRegistry.LinkType<Product>("Product");
 
         foreach (var definition in metadata)
             entityStore.EnsureTableExists(definition);

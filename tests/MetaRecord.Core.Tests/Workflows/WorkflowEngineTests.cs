@@ -126,8 +126,8 @@ public sealed class WorkflowEngineTests : IDisposable
 
     private static WorkflowDefinition CreateCreatedWorkflow() => new()
     {
-        Name = "Log product created",
-        ObjectName = "Product",
+        Name = "Log todo created",
+        ObjectName = "Todo",
         EventName = WorkflowEventName.Created,
         IsEnabled = true,
         Nodes = new[]
@@ -144,12 +144,12 @@ public sealed class WorkflowEngineTests : IDisposable
     private static WorkflowDefinition CreateConditionWorkflow() => new()
     {
         Name = "Condition branches",
-        ObjectName = "Product",
+        ObjectName = "Todo",
         EventName = WorkflowEventName.FieldChanged,
         IsEnabled = true,
         Nodes = new[]
         {
-            Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Quantity\" }"),
+            Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Priority\" }"),
             ConditionNode("condition-1"),
             WriteLogNode("true-log"),
             WriteLogNode("false-log")
@@ -165,7 +165,7 @@ public sealed class WorkflowEngineTests : IDisposable
     private static WorkflowDefinition CreateStopWorkflow() => new()
     {
         Name = "Stop branch",
-        ObjectName = "Product",
+        ObjectName = "Todo",
         EventName = WorkflowEventName.Created,
         IsEnabled = true,
         Nodes = new[]
@@ -184,12 +184,12 @@ public sealed class WorkflowEngineTests : IDisposable
     private static WorkflowDefinition CreateConvergingWorkflow() => new()
     {
         Name = "Converging branches",
-        ObjectName = "Product",
+        ObjectName = "Todo",
         EventName = WorkflowEventName.FieldChanged,
         IsEnabled = true,
         Nodes = new[]
         {
-            Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Quantity\" }"),
+            Node("trigger-1", "trigger.field-changed", "{ \"fieldName\": \"Priority\" }"),
             ConditionNode("condition-1"),
             WriteLogNode("log-1")
         },
@@ -204,7 +204,7 @@ public sealed class WorkflowEngineTests : IDisposable
     private static WorkflowNode ConditionNode(string id) => Node(id, "flow.condition", """
     {
       "condition": {
-        "left": { "source": "currentRecord", "field": "Quantity" },
+        "left": { "source": "currentRecord", "field": "Priority" },
         "operator": "lessThan",
         "right": { "source": "literal", "value": 10 }
       }
@@ -214,7 +214,7 @@ public sealed class WorkflowEngineTests : IDisposable
     private static WorkflowNode WriteLogNode(string id) => Node(id, "action.write-log", """
     {
       "severity": "Information",
-      "message": "Product {{currentRecord.Name}} changed."
+    "message": "Todo {{currentRecord.Title}} changed."
     }
     """);
 
@@ -241,21 +241,22 @@ public sealed class WorkflowEngineTests : IDisposable
 
     private static WorkflowEvent CreateEvent(string eventName) => new()
     {
-        ObjectName = "Product",
+        ObjectName = "Todo",
         EventName = eventName,
         RecordId = Guid.NewGuid().ToString(),
         CurrentRecord = new Dictionary<string, object?>
         {
             ["Id"] = Guid.NewGuid(),
-            ["Name"] = "Widget",
-            ["Price"] = 9.99m,
-            ["Quantity"] = 5
+            ["Title"] = "Todo item",
+            ["Description"] = "Sample todo",
+            ["Status"] = "Open",
+            ["Priority"] = 5
         },
         OriginalRecord = new Dictionary<string, object?>
         {
-            ["Quantity"] = 12
+            ["Priority"] = 12
         },
-        ChangedFields = new[] { "Quantity" }
+        ChangedFields = new[] { "Priority" }
     };
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
@@ -265,14 +266,15 @@ public sealed class WorkflowEngineTests : IDisposable
         MetadataRegistry.Clear();
         MetadataRegistry.RegisterByName(new ObjectMetadata
         {
-            Name = "Product",
-            TableName = "Products",
+            Name = "Todo",
+            TableName = "Todos",
             Properties = new[]
             {
                 new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
-                new PropertyMetadata("Name", "Name", typeof(string), true),
-                new PropertyMetadata("Price", "Price", typeof(decimal), true),
-                new PropertyMetadata("Quantity", "Quantity", typeof(int), false)
+                new PropertyMetadata("Title", "Title", typeof(string), true),
+                new PropertyMetadata("Description", "Description", typeof(string), false),
+                new PropertyMetadata("Status", "Status", typeof(string), true),
+                new PropertyMetadata("Priority", "Priority", typeof(int), false)
             }
         });
     }

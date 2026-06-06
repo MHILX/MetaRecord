@@ -1,24 +1,19 @@
 import { FlaskConical, Play } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
 import type { ObjectMetadata, WorkflowDefinition, WorkflowTestRunResponse } from '../api/types';
 import { getObject } from './workflowModel';
 
 interface TestRunPanelProps {
   workflow?: WorkflowDefinition | null;
   metadataObjects: ObjectMetadata[];
+  values: Record<string, string>;
+  onValuesChange: (values: Record<string, string>) => void;
   testResult?: WorkflowTestRunResponse | null;
   isRunning: boolean;
   onRun: (currentRecord: Record<string, unknown>) => void;
 }
 
-export function TestRunPanel({ workflow, metadataObjects, testResult, isRunning, onRun }: TestRunPanelProps) {
+export function TestRunPanel({ workflow, metadataObjects, values, onValuesChange, testResult, isRunning, onRun }: TestRunPanelProps) {
   const metadata = workflow ? getObject(metadataObjects, workflow.objectName) : undefined;
-  const initialValues = useMemo(() => metadata ? createSampleRecord(metadata) : {}, [metadata]);
-  const [values, setValues] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    setValues(Object.fromEntries(Object.entries(initialValues).map(([key, value]) => [key, String(value ?? '')])));
-  }, [initialValues]);
 
   function run() {
     if (!metadata)
@@ -53,7 +48,7 @@ export function TestRunPanel({ workflow, metadataObjects, testResult, isRunning,
                 <span>{property.name}</span>
                 <input
                   value={values[property.name] ?? ''}
-                  onChange={event => setValues(current => ({ ...current, [property.name]: event.target.value }))}
+                  onChange={event => onValuesChange({ ...values, [property.name]: event.target.value })}
                 />
               </label>
             ))}
@@ -86,23 +81,6 @@ export function TestRunPanel({ workflow, metadataObjects, testResult, isRunning,
       )}
     </section>
   );
-}
-
-function createSampleRecord(metadata: ObjectMetadata): Record<string, unknown> {
-  const values: Record<string, unknown> = {};
-  for (const property of metadata.properties) {
-    if (property.clrType === 'Guid')
-      values[property.name] = crypto.randomUUID();
-    else if (property.clrType === 'Decimal')
-      values[property.name] = '9.99';
-    else if (property.clrType === 'Int32')
-      values[property.name] = '5';
-    else if (property.clrType === 'Boolean')
-      values[property.name] = 'true';
-    else
-      values[property.name] = `Sample ${metadata.name}`;
-  }
-  return values;
 }
 
 function coerceValue(value: string | undefined, clrType: string) {

@@ -7,13 +7,13 @@ namespace MetaRecord.Core.Tests.Workflows;
 public sealed class ConditionEvaluatorTests
 {
     [Theory]
-    [InlineData("equals", "Quantity", "5", true)]
-    [InlineData("notEquals", "Quantity", "3", true)]
-    [InlineData("greaterThan", "Quantity", "3", true)]
-    [InlineData("greaterThanOrEqual", "Quantity", "5", true)]
-    [InlineData("lessThan", "Quantity", "8", true)]
-    [InlineData("lessThanOrEqual", "Quantity", "5", true)]
-    [InlineData("greaterThan", "Quantity", "8", false)]
+    [InlineData("equals", "Priority", "5", true)]
+    [InlineData("notEquals", "Priority", "3", true)]
+    [InlineData("greaterThan", "Priority", "3", true)]
+    [InlineData("greaterThanOrEqual", "Priority", "5", true)]
+    [InlineData("lessThan", "Priority", "8", true)]
+    [InlineData("lessThanOrEqual", "Priority", "5", true)]
+    [InlineData("greaterThan", "Priority", "8", false)]
     public void Evaluate_compares_numeric_values(string operatorName, string fieldName, string literalValue, bool expected)
     {
         var result = WorkflowConditionEvaluator.Evaluate(
@@ -30,16 +30,16 @@ public sealed class ConditionEvaluatorTests
     }
 
     [Theory]
-    [InlineData("contains", "idg", true)]
-    [InlineData("startsWith", "wid", true)]
-    [InlineData("endsWith", "GET", true)]
+    [InlineData("contains", "odo", true)]
+    [InlineData("startsWith", "Tod", true)]
+    [InlineData("endsWith", "item", true)]
     [InlineData("contains", "missing", false)]
     public void Evaluate_compares_text_without_case_sensitivity(string operatorName, string literalValue, bool expected)
     {
         var result = WorkflowConditionEvaluator.Evaluate(
             Condition($$"""
             {
-              "left": { "source": "currentRecord", "field": "Name" },
+                            "left": { "source": "currentRecord", "field": "Title" },
               "operator": "{{operatorName}}",
               "right": { "source": "literal", "value": "{{literalValue}}" }
             }
@@ -50,8 +50,8 @@ public sealed class ConditionEvaluatorTests
     }
 
     [Theory]
-    [InlineData("isEmpty", "Notes", true)]
-    [InlineData("isNotEmpty", "Name", true)]
+    [InlineData("isEmpty", "Description", true)]
+    [InlineData("isNotEmpty", "Title", true)]
     public void Evaluate_handles_empty_operators_without_right_operand(string operatorName, string fieldName, bool expected)
     {
         var result = WorkflowConditionEvaluator.Evaluate(
@@ -74,7 +74,7 @@ public sealed class ConditionEvaluatorTests
         var dateResult = WorkflowConditionEvaluator.Evaluate(
             Condition("""
             {
-              "left": { "source": "currentRecord", "field": "ExpiresAt" },
+                            "left": { "source": "currentRecord", "field": "DueAt" },
               "operator": "greaterThan",
               "right": { "source": "literal", "value": "2026-04-27T00:00:00Z" }
             }
@@ -84,7 +84,7 @@ public sealed class ConditionEvaluatorTests
         var boolResult = WorkflowConditionEvaluator.Evaluate(
             Condition("""
             {
-              "left": { "source": "currentRecord", "field": "IsActive" },
+                            "left": { "source": "currentRecord", "field": "IsArchived" },
               "operator": "equals",
               "right": { "source": "literal", "value": "true" }
             }
@@ -101,7 +101,7 @@ public sealed class ConditionEvaluatorTests
         var result = WorkflowConditionEvaluator.Evaluate(
             Condition("""
             {
-              "left": { "source": "CURRENTRECORD", "field": "Quantity" },
+                            "left": { "source": "CURRENTRECORD", "field": "Priority" },
               "operator": "GREATERTHAN",
               "right": { "source": "LITERAL", "value": 3 }
             }
@@ -117,7 +117,7 @@ public sealed class ConditionEvaluatorTests
         var exception = Assert.Throws<InvalidOperationException>(() => WorkflowConditionEvaluator.Evaluate(
             Condition("""
             {
-              "left": { "source": "currentRecord", "field": "Quantity" },
+                            "left": { "source": "currentRecord", "field": "Priority" },
               "operator": "between",
               "right": { "source": "literal", "value": 3 }
             }
@@ -131,16 +131,16 @@ public sealed class ConditionEvaluatorTests
     {
         WorkflowId = Guid.NewGuid(),
         WorkflowVersion = 1,
-        ObjectName = "Product",
+        ObjectName = "Todo",
         EventName = "Manual",
         RecordId = Guid.NewGuid().ToString(),
         CurrentRecord = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Name"] = "Widget",
-            ["Quantity"] = 5,
-            ["Notes"] = "",
-            ["IsActive"] = true,
-            ["ExpiresAt"] = DateTime.Parse("2026-04-28T00:00:00Z")
+            ["Title"] = "Todo item",
+            ["Priority"] = 5,
+            ["Description"] = "",
+            ["IsArchived"] = true,
+            ["DueAt"] = DateTime.Parse("2026-04-28T00:00:00Z")
         }
     };
 
