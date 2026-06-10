@@ -568,11 +568,19 @@ textarea {
   gap: 12px;
 }
 
+.metadata-panel-details {
+  gap: 10px;
+}
+
 .metadata-heading-actions,
 .metadata-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.metadata-actions {
+  flex-wrap: wrap;
 }
 
 .metadata-object-list,
@@ -613,6 +621,16 @@ textarea {
   background: #ffffff;
 }
 
+.metadata-panel-details .metadata-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metadata-panel-details .metadata-form {
+  gap: 10px;
+}
+
 .metadata-property-card-header {
   display: flex;
   align-items: center;
@@ -632,6 +650,11 @@ textarea {
   gap: 8px;
 }
 
+.metadata-panel-details .metadata-property-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 8px;
+}
+
 .metadata-property-grid .field-control {
   gap: 4px;
 }
@@ -642,6 +665,16 @@ textarea {
   gap: 7px;
   min-height: 34px;
   padding-top: 16px;
+}
+
+.metadata-panel-details .checkbox-field {
+  min-height: 0;
+  padding-top: 0;
+  align-self: center;
+}
+
+.metadata-panel-details .metadata-actions {
+  gap: 6px;
 }
 
 .checkbox-field span {
@@ -734,6 +767,12 @@ textarea {
   border-radius: 14px;
   background: #ffffff;
   box-shadow: 0 24px 80px rgba(17, 24, 39, 0.35);
+}
+
+.panel-dialog-metadata {
+  width: min(1024px, calc(100vw - 32px));
+  height: min(720px, calc(100vh - 32px));
+  padding: 12px;
 }
 
 .panel-dialog-header {

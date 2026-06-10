@@ -1,4 +1,4 @@
-import { Database, FilePlus2, Plus, RefreshCcw, Save, Trash2 } from 'lucide-react';
+import { Database, FilePlus2, Plus, RefreshCcw, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ApiError, workflowApi } from '../api/client';
 import type {
@@ -12,26 +12,37 @@ import type {
 interface MetadataManagerProps {
   metadataObjects: ObjectMetadata[];
   isLoading: boolean;
+  selectedObjectId: MetadataSelectionId;
+  onSelectedObjectIdChange: (selectedObjectId: MetadataSelectionId) => void;
   onMetadataObjectsChange: (metadataObjects: ObjectMetadata[]) => void;
   onRefreshMetadata: () => Promise<void>;
   onNotice: (message: string, kind?: 'info' | 'error') => void;
+  showDetails?: boolean;
+  showObjectList?: boolean;
+  onOpenEditor?: () => void;
 }
 
-type MetadataSelectionId = string | 'new' | null;
+export type MetadataSelectionId = string | 'new' | null;
 
 const supportedClrTypes = ['Guid', 'String', 'Int32', 'Int64', 'Decimal', 'Double', 'Boolean', 'DateTime'] as const;
 
 export function MetadataManager({
   metadataObjects,
   isLoading,
+  selectedObjectId,
+  onSelectedObjectIdChange,
   onMetadataObjectsChange,
   onRefreshMetadata,
-  onNotice
+  onNotice,
+  showDetails = true,
+  showObjectList = true,
+  onOpenEditor
 }: MetadataManagerProps) {
-  const [selectedObjectId, setSelectedObjectId] = useState<MetadataSelectionId>(null);
   const [draft, setDraft] = useState<ObjectMetadataUpsertRequest>(createNewMetadataDraft);
   const [validationIssues, setValidationIssues] = useState<MetadataValidationIssue[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const isCompact = showDetails === false;
+  const shouldShowObjectList = showObjectList !== false;
 
   useEffect(() => {
     if (isLoading)
@@ -39,17 +50,56 @@ export function MetadataManager({
 
     if (metadataObjects.length === 0) {
       if (selectedObjectId !== 'new')
-        openNewObject();
+        onSelectedObjectIdChange('new');
+      else {
+        setDraft(createNewMetadataDraft());
+        setValidationIssues([]);
+      }
       return;
     }
 
     if (selectedObjectId === null) {
-      openObject(metadataObjects[0]);
+      onSelectedObjectIdChange(metadataObjects[0].id);
       return;
     }
 
-    if (selectedObjectId === 'new')
+    if (selectedObjectId === 'new') {
+      setDraft(createNewMetadataDraft());
+      setValidationIssues([]);
       return;
+    }
+
+    const selectedObject = metadataObjects.find(metadataObject => metadataObject.id === selectedObjectId);
+    if (selectedObject) {
+      setDraft(toMetadataDraft(selectedObject));
+      setValidationIssues([]);
+      return;
+    }
+
+    onSelectedObjectIdChange(metadataObjects[0].id);
+  }, [isLoading, metadataObjects, onSelectedObjectIdChange, selectedObjectId]);
+
+  function openObject(metadataObject: ObjectMetadata) {
+    onSelectedObjectIdChange(metadataObject.id);
+    setDraft(toMetadataDraft(metadataObject));
+    setValidationIssues([]);
+    if (isCompact)
+      onOpenEditor?.();
+  }
+
+  function openNewObject() {
+    onSelectedObjectIdChange('new');
+    setDraft(createNewMetadataDraft());
+    setValidationIssues([]);
+    if (isCompact)
+      onOpenEditor?.();
+  }
+
+  function discardDraft() {
+    if (selectedObjectId === 'new' || metadataObjects.length === 0) {
+      openNewObject();
+      return;
+    }
 
     const selectedObject = metadataObjects.find(metadataObject => metadataObject.id === selectedObjectId);
     if (selectedObject) {
@@ -59,18 +109,6 @@ export function MetadataManager({
     }
 
     openObject(metadataObjects[0]);
-  }, [isLoading, metadataObjects, selectedObjectId]);
-
-  function openObject(metadataObject: ObjectMetadata) {
-    setSelectedObjectId(metadataObject.id);
-    setDraft(toMetadataDraft(metadataObject));
-    setValidationIssues([]);
-  }
-
-  function openNewObject() {
-    setSelectedObjectId('new');
-    setDraft(createNewMetadataDraft());
-    setValidationIssues([]);
   }
 
   function updateDraft(updater: (current: ObjectMetadataUpsertRequest) => ObjectMetadataUpsertRequest) {
@@ -154,7 +192,7 @@ export function MetadataManager({
         : [...metadataObjects, savedObject];
 
       onMetadataObjectsChange(nextObjects);
-      setSelectedObjectId(savedObject.id);
+      onSelectedObjectIdChange(savedObject.id);
       setDraft(toMetadataDraft(savedObject));
       setValidationIssues([]);
       onNotice('Metadata object saved.');
@@ -211,129 +249,145 @@ export function MetadataManager({
   }
 
   return (
-    <section className="panel metadata-panel">
-      <div className="panel-heading">
-        <h2>Metadata</h2>
-        <div className="metadata-heading-actions">
-          <button className="secondary-button" type="button" onClick={openNewObject}>
-            <FilePlus2 size={16} aria-hidden="true" />
-            New
-          </button>
-          <button className="icon-button" type="button" onClick={refreshMetadataObjects} title="Refresh metadata objects">
-            <RefreshCcw size={16} aria-hidden="true" />
-          </button>
+    <section className={showObjectList ? 'panel metadata-panel' : 'panel metadata-panel metadata-panel-details'}>
+      {shouldShowObjectList && (
+        <div className="panel-heading">
+          <h2>Metadata</h2>
+          <div className="metadata-heading-actions">
+            <button className="secondary-button" type="button" onClick={openNewObject}>
+              <FilePlus2 size={16} aria-hidden="true" />
+              New
+            </button>
+            <button className="icon-button" type="button" onClick={refreshMetadataObjects} title="Refresh metadata objects">
+              <RefreshCcw size={16} aria-hidden="true" />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="metadata-object-list">
-        <button
-          className={`workflow-list-item ${selectedObjectId === 'new' ? 'selected' : ''}`}
-          type="button"
-          onClick={openNewObject}
-        >
-          <Database size={16} aria-hidden="true" />
-          <span>
-            <strong>New object</strong>
-            <small>Unsaved draft</small>
-          </span>
-          <em>Draft</em>
-        </button>
-
-        {metadataObjects.map(metadataObject => (
+      {shouldShowObjectList && (
+        <div className="metadata-object-list">
           <button
-            className={`workflow-list-item ${selectedObjectId === metadataObject.id ? 'selected' : ''}`}
-            key={metadataObject.id}
+            className={`workflow-list-item ${selectedObjectId === 'new' ? 'selected' : ''}`}
             type="button"
-            onClick={() => openObject(metadataObject)}
+            onClick={openNewObject}
           >
             <Database size={16} aria-hidden="true" />
             <span>
-              <strong>{metadataObject.name}</strong>
-              <small>{metadataObject.tableName}</small>
+              <strong>New object</strong>
+              <small>Unsaved draft</small>
             </span>
-            <em>{metadataObject.properties.length} props</em>
+            <em>Draft</em>
           </button>
-        ))}
-      </div>
 
-      <div className="metadata-object-summary">
-        <span>{selectedObjectId === 'new' ? 'Draft object' : 'Saved object'}</span>
-        <strong>{draft.name || 'Untitled object'}</strong>
-        <small>{draft.tableName || 'Table name'}</small>
-      </div>
-
-      <div className="metadata-form">
-        <label className="field-control">
-          <span>Object name</span>
-          <input
-            value={draft.name}
-            onChange={event => updateObjectField('name', event.target.value)}
-            placeholder="CustomRecord"
-          />
-        </label>
-
-        <label className="field-control">
-          <span>Table name</span>
-          <input
-            value={draft.tableName}
-            onChange={event => updateObjectField('tableName', event.target.value)}
-            placeholder="CustomRecords"
-          />
-        </label>
-
-        <p className="metadata-help">The Id property is required and must stay mapped to a Guid primary key.</p>
-
-        <div className="metadata-property-list">
-          {draft.properties.map((property, index) => (
-            <MetadataPropertyCard
-              key={`${property.name}-${index}`}
-              property={property}
-              index={index}
-              onChange={updater => updateProperty(index, updater)}
-              onDelete={() => removeProperty(index)}
-              canDelete={index > 0}
-            />
+          {metadataObjects.map(metadataObject => (
+            <button
+              className={`workflow-list-item ${selectedObjectId === metadataObject.id ? 'selected' : ''}`}
+              key={metadataObject.id}
+              type="button"
+              onClick={() => openObject(metadataObject)}
+            >
+              <Database size={16} aria-hidden="true" />
+              <span>
+                <strong>{metadataObject.name}</strong>
+                <small>{metadataObject.tableName}</small>
+              </span>
+              <em>{metadataObject.properties.length} props</em>
+            </button>
           ))}
         </div>
+      )}
 
-        <button className="secondary-button" type="button" onClick={addProperty}>
-          <Plus size={16} aria-hidden="true" />
-          Add property
-        </button>
-
-        {validationIssues.length > 0 && (
-          <div className="issue-list metadata-issues">
-            {validationIssues.map((issue, index) => (
-              <div className={`issue-row ${issue.severity === 'Error' ? 'issue-error' : ''}`} key={`${issue.field ?? 'metadata'}-${index}`}>
-                <span>
-                  <em>{issue.severity}</em>
-                  <strong>{issue.field ?? 'object'}</strong>
-                  <small>{issue.message}</small>
-                </span>
-              </div>
-            ))}
+      {isCompact ? (
+        <p className="metadata-help">Open the popup to edit object details.</p>
+      ) : (
+        <>
+          <div className="metadata-object-summary">
+            <span>{selectedObjectId === 'new' ? 'Draft object' : 'Saved object'}</span>
+            <strong>{draft.name || 'Untitled object'}</strong>
+            <small>{draft.tableName || 'Table name'}</small>
           </div>
-        )}
 
-        <div className="metadata-actions">
-          <button className="secondary-button" type="button" onClick={validateDraft} disabled={isSaving}>
-            Validate
-          </button>
-          <button className="primary-button" type="button" onClick={saveDraft} disabled={isSaving}>
-            <Save size={16} aria-hidden="true" />
-            Save
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={deleteDraft}
-            disabled={isSaving || selectedObjectId === 'new' || !draft.id}
-          >
-            <Trash2 size={16} aria-hidden="true" />
-            Delete
-          </button>
-        </div>
-      </div>
+          <div className="metadata-form">
+            <div className="metadata-details-grid">
+              <label className="field-control">
+                <span>Object name</span>
+                <input
+                  value={draft.name}
+                  onChange={event => updateObjectField('name', event.target.value)}
+                  placeholder="CustomRecord"
+                />
+              </label>
+
+              <label className="field-control">
+                <span>Table name</span>
+                <input
+                  value={draft.tableName}
+                  onChange={event => updateObjectField('tableName', event.target.value)}
+                  placeholder="CustomRecords"
+                />
+              </label>
+            </div>
+
+            <p className="metadata-help">The Id property is required and must stay mapped to a Guid primary key.</p>
+
+            <div className="metadata-property-list">
+              {draft.properties.map((property, index) => (
+                <MetadataPropertyCard
+                  key={`${property.name}-${index}`}
+                  property={property}
+                  index={index}
+                  onChange={updater => updateProperty(index, updater)}
+                  onDelete={() => removeProperty(index)}
+                  canDelete={index > 0}
+                />
+              ))}
+            </div>
+
+            <button className="secondary-button" type="button" onClick={addProperty}>
+              <Plus size={16} aria-hidden="true" />
+              Add property
+            </button>
+
+            {validationIssues.length > 0 && (
+              <div className="issue-list metadata-issues">
+                {validationIssues.map((issue, index) => (
+                  <div className={`issue-row ${issue.severity === 'Error' ? 'issue-error' : ''}`} key={`${issue.field ?? 'metadata'}-${index}`}>
+                    <span>
+                      <em>{issue.severity}</em>
+                      <strong>{issue.field ?? 'object'}</strong>
+                      <small>{issue.message}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="metadata-actions">
+              <button className="secondary-button" type="button" onClick={discardDraft} disabled={isSaving}>
+                <X size={16} aria-hidden="true" />
+                Discard
+              </button>
+              <button className="secondary-button" type="button" onClick={validateDraft} disabled={isSaving}>
+                Validate
+              </button>
+              <button className="primary-button" type="button" onClick={saveDraft} disabled={isSaving}>
+                <Save size={16} aria-hidden="true" />
+                Save
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={deleteDraft}
+                disabled={isSaving || selectedObjectId === 'new' || !draft.id}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </section>
   );
 }

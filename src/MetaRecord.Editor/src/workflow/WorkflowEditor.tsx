@@ -12,7 +12,7 @@ import type {
   WorkflowValidationResponse
 } from '../api/types';
 import { NodePalette } from './NodePalette';
-import { MetadataManager } from './MetadataManager';
+import { MetadataManager, type MetadataSelectionId } from './MetadataManager';
 import { PropertyInspector } from './PropertyInspector';
 import { RunHistoryPanel } from './RunHistoryPanel';
 import { TestRunPanel } from './TestRunPanel';
@@ -56,6 +56,7 @@ function getBottomRailTabLabel(tab: BottomRailTab): string {
 export function WorkflowEditor() {
   const preferredDemoWorkflowName = demoDomain.preferredWorkflowName;
   const [metadataObjects, setMetadataObjects] = useState<ObjectMetadata[]>([]);
+  const [selectedMetadataObjectId, setSelectedMetadataObjectId] = useState<MetadataSelectionId>(null);
   const [nodeTypes, setNodeTypes] = useState<WorkflowNodeType[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
   const [savedWorkflowIds, setSavedWorkflowIds] = useState<Set<string>>(new Set());
@@ -121,6 +122,11 @@ export function WorkflowEditor() {
 
   function showNotice(message: string, kind: NoticeKind = 'info') {
     setNotice({ message, kind });
+  }
+
+  function openMetadataDialog() {
+    setIsBottomRailDialogOpen(false);
+    setIsLeftRailDialogOpen(true);
   }
 
   async function loadInitialData() {
@@ -390,10 +396,7 @@ export function WorkflowEditor() {
               <button
                 className="secondary-button left-rail-popout-button"
                 type="button"
-                onClick={() => {
-                  setIsBottomRailDialogOpen(false);
-                  setIsLeftRailDialogOpen(true);
-                }}
+                onClick={openMetadataDialog}
                 aria-haspopup="dialog"
                 aria-expanded={isLeftRailDialogOpen}
               >
@@ -419,9 +422,14 @@ export function WorkflowEditor() {
               <MetadataManager
                 metadataObjects={metadataObjects}
                 isLoading={isLoading}
+                selectedObjectId={selectedMetadataObjectId}
+                onSelectedObjectIdChange={setSelectedMetadataObjectId}
                 onMetadataObjectsChange={setMetadataObjects}
                 onRefreshMetadata={reloadMetadataObjects}
                 onNotice={showNotice}
+                showDetails={false}
+                showObjectList={true}
+                onOpenEditor={openMetadataDialog}
               />
             </div>
 
@@ -468,17 +476,19 @@ export function WorkflowEditor() {
       {isLeftRailDialogOpen && leftRailTab !== 'workflows' && (
         <div className="panel-dialog-overlay" role="presentation" onClick={() => setIsLeftRailDialogOpen(false)}>
           <section
-            className="panel-dialog"
+            className={leftRailTab === 'metadata' ? 'panel-dialog panel-dialog-metadata' : 'panel-dialog'}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="left-rail-dialog-title"
+            aria-label={leftRailTab === 'metadata' ? 'Metadata details' : 'Expanded left rail'}
             onClick={event => event.stopPropagation()}
           >
             <div className="panel-dialog-header">
-              <div>
-                <span>Expanded left rail</span>
-                <h2 id="left-rail-dialog-title">{getLeftRailTabLabel(leftRailTab)}</h2>
-              </div>
+              {leftRailTab !== 'metadata' && (
+                <div>
+                  <span>Expanded left rail</span>
+                  <h2>{getLeftRailTabLabel(leftRailTab)}</h2>
+                </div>
+              )}
               <button className="icon-button" type="button" onClick={() => setIsLeftRailDialogOpen(false)} aria-label="Close popout">
                 <X size={16} aria-hidden="true" />
               </button>
@@ -489,9 +499,12 @@ export function WorkflowEditor() {
                 <MetadataManager
                   metadataObjects={metadataObjects}
                   isLoading={isLoading}
+                  selectedObjectId={selectedMetadataObjectId}
+                  onSelectedObjectIdChange={setSelectedMetadataObjectId}
                   onMetadataObjectsChange={setMetadataObjects}
                   onRefreshMetadata={reloadMetadataObjects}
                   onNotice={showNotice}
+                  showObjectList={false}
                 />
               )}
 
