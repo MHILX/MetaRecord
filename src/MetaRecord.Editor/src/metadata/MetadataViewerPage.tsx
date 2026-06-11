@@ -1,7 +1,7 @@
 import { Database, Save } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { ApiError, workflowApi } from '../api/client';
-import type { ObjectMetadata, PropertyMetadata } from '../api/types';
+import type { MetadataRecordValues, ObjectMetadata, PropertyMetadata } from '../api/types';
 import { EditorPrimaryNav } from '../navigation/EditorPrimaryNav';
 import { MetadataManager, type MetadataSelectionId } from '../workflow/MetadataManager';
 
@@ -16,16 +16,24 @@ export function MetadataViewerPage() {
   const [objects, setObjects] = useState<ObjectMetadata[]>([]);
   const [selectedMetadataObjectId, setSelectedMetadataObjectId] = useState<MetadataSelectionId>(null);
   const [formValues, setFormValues] = useState<MetadataFormValues>({});
+  const [recordRows, setRecordRows] = useState<MetadataRecordValues[]>([]);
   const [rightPanelTab, setRightPanelTab] = useState<'form' | 'edit'>('form');
   const [isLoadingObjects, setIsLoadingObjects] = useState(true);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
   const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [recordLoadError, setRecordLoadError] = useState<string | null>(null);
   const [metadataNotice, setMetadataNotice] = useState<PageNotice | null>(null);
+  const selectedObjectIdRef = useRef<MetadataSelectionId>(selectedMetadataObjectId);
 
   useEffect(() => {
     void loadObjects();
   }, []);
+
+  useEffect(() => {
+    selectedObjectIdRef.current = selectedMetadataObjectId;
+  }, [selectedMetadataObjectId]);
 
   useEffect(() => {
     if (!saveMessage)
@@ -46,6 +54,7 @@ export function MetadataViewerPage() {
   const selectedObject = selectedMetadataObjectId && selectedMetadataObjectId !== 'new'
     ? objects.find(metadataObject => metadataObject.id === selectedMetadataObjectId) ?? null
     : null;
+  const selectedObjectRecordId = selectedObject?.id ?? null;
   const selectedPropertyCount = selectedObject?.properties.length ?? 0;
   const formattedJson = JSON.stringify(formValues, null, 2);
 
@@ -68,6 +77,19 @@ export function MetadataViewerPage() {
     setFormValues({});
   }, [selectedObject]);
 
+  useEffect(() => {
+    if (!selectedObjectRecordId) {
+      setRecordRows([]);
+      setRecordLoadError(null);
+      setIsLoadingRecords(false);
+      return;
+    }
+
+    setRecordRows([]);
+    setRecordLoadError(null);
+    void loadRecords(selectedObjectRecordId);
+  }, [selectedObjectRecordId]);
+
   async function loadObjects() {
     setIsLoadingObjects(true);
 
@@ -88,6 +110,35 @@ export function MetadataViewerPage() {
       showMetadataNotice(getErrorMessage(error, 'Could not load metadata objects.'), 'error');
     } finally {
       setIsLoadingObjects(false);
+    }
+  }
+
+  async function loadRecords(objectId: string | null) {
+    if (!objectId) {
+      setRecordRows([]);
+      setRecordLoadError(null);
+      setIsLoadingRecords(false);
+      return;
+    }
+
+    setIsLoadingRecords(true);
+    setRecordLoadError(null);
+
+    try {
+      const nextRows = await workflowApi.listRecords(objectId);
+      if (selectedObjectIdRef.current !== objectId)
+        return;
+
+      setRecordRows(nextRows);
+    } catch (error) {
+      if (selectedObjectIdRef.current !== objectId)
+        return;
+
+      setRecordRows([]);
+      setRecordLoadError(getErrorMessage(error, 'Could not load saved records.'));
+    } finally {
+      if (selectedObjectIdRef.current === objectId)
+        setIsLoadingRecords(false);
     }
   }
 
@@ -120,6 +171,7 @@ export function MetadataViewerPage() {
     try {
       const result = await workflowApi.saveRecord(selectedObject.id, { values: formValues });
       setSaveMessage(`${result.isNew ? 'Saved' : 'Updated'} record ${result.recordId} in ${selectedObject.tableName}.`);
+      await loadRecords(selectedObject.id);
     } catch (error) {
       setSaveError(getErrorMessage(error, 'Could not save the record.'));
     } finally {
@@ -264,6 +316,49 @@ export function MetadataViewerPage() {
 
                 <pre className="metadata-json">{formattedJson}</pre>
               </section>
+
+              <section className="metadata-viewer-section">
+                <div className="panel-heading">
+                  <h2>Saved records</h2>
+                  <span className="muted">
+                    {isLoadingRecords ? 'Loading...' : `${recordRows.length} ${recordRows.length === 1 ? 'row' : 'rows'}`}
+                  </span>
+                </div>
+
+                {recordLoadError ? (
+                  <div className="metadata-save-status error">
+                    <strong>Could not load saved records</strong>
+                    <span>{recordLoadError}</span>
+                  </div>
+                ) : selectedObject.properties.length === 0 ? (
+                  <p className="metadata-help">No properties are available to display in the table.</p>
+                ) : isLoadingRecords ? (
+                  <p className="metadata-help">Loading saved records...</p>
+                ) : recordRows.length === 0 ? (
+                  <p className="metadata-help">No saved records yet.</p>
+                ) : (
+                  <div className="metadata-record-table-wrapper">
+                    <table className="metadata-record-table">
+                      <thead>
+                        <tr>
+                          {selectedObject.properties.map(property => (
+                            <th key={property.name}>{property.caption?.trim() || property.name}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recordRows.map((record, rowIndex) => (
+                          <tr key={rowIndex}>
+                            {selectedObject.properties.map(property => (
+                              <td key={property.name}>{formatRecordValue(record[property.name])}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
               </form>
             ) : (
               <div className="empty-canvas metadata-page-empty">
@@ -284,6 +379,30 @@ function getErrorMessage(error: unknown, fallback: string) {
     return `${fallback} ${error.message}`;
 
   return fallback;
+}
+
+function formatRecordValue(value: unknown): string {
+  if (value === null || value === undefined)
+    return '—';
+
+  if (typeof value === 'string')
+    return value;
+
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint')
+    return String(value);
+
+  if (value instanceof Date)
+    return value.toISOString();
+
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  return String(value);
 }
 
 function MetadataPropertyField({

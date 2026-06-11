@@ -160,6 +160,18 @@ public static class MetadataEndpoints
             }
         });
 
+        group.MapGet("/objects/{id:guid}/records", async (
+            Guid id,
+            MetadataRepository repository,
+            EntityStore entityStore) =>
+        {
+            var metadata = await repository.GetByIdAsync(id);
+            if (metadata is null)
+                return Results.NotFound();
+
+            return Results.Ok(entityStore.AllValues(metadata));
+        });
+
         return app;
     }
 

@@ -40,6 +40,8 @@ export interface MetadataRecordSaveResponse {
   isNew: boolean;
 }
 
+export type MetadataRecordValues = Record<string, unknown>;
+
 export interface PropertyMetadataUpsertRequest {
   name: string;
   columnName: string;

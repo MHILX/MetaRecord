@@ -152,6 +152,27 @@ public class EntityStore
             : new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
     }
 
+    public List<Dictionary<string, object?>> AllValues(IObjectMetadata metadata)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+
+        var keyColumn = GetPrimaryKeyColumnName(metadata);
+        var sql = $"SELECT * FROM {metadata.TableName} ORDER BY {keyColumn}";
+        var results = new List<Dictionary<string, object?>>();
+
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        using var command = new SqliteCommand(sql, connection);
+
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            results.Add(MapToValues(reader, metadata));
+        }
+
+        return results;
+    }
+
     public void UpdateValues(IObjectMetadata metadata, Guid id, IReadOnlyDictionary<string, object?> values)
     {
         ArgumentNullException.ThrowIfNull(metadata);

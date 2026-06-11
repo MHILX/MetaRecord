@@ -43,6 +43,7 @@ export function MetadataManager({
   const [draft, setDraft] = useState<ObjectMetadataUpsertRequest>(createNewMetadataDraft);
   const [validationIssues, setValidationIssues] = useState<MetadataValidationIssue[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedObjectSnapshot, setSelectedObjectSnapshot] = useState<ObjectMetadata | null>(null);
   const isCompact = showDetails === false;
   const shouldShowObjectList = showObjectList !== false;
   const shouldShowCreateButton = showCreateButton !== false;
@@ -69,6 +70,7 @@ export function MetadataManager({
     if (selectedObjectId === 'new') {
       setDraft(createNewMetadataDraft());
       setValidationIssues([]);
+      setSelectedObjectSnapshot(null);
       return;
     }
 
@@ -76,6 +78,7 @@ export function MetadataManager({
     if (selectedObject) {
       setDraft(toMetadataDraft(selectedObject));
       setValidationIssues([]);
+      setSelectedObjectSnapshot(selectedObject);
       return;
     }
 
@@ -86,6 +89,7 @@ export function MetadataManager({
     onSelectedObjectIdChange(metadataObject.id);
     setDraft(toMetadataDraft(metadataObject));
     setValidationIssues([]);
+    setSelectedObjectSnapshot(metadataObject);
     if (isCompact)
       onOpenEditor?.();
   }
@@ -94,6 +98,7 @@ export function MetadataManager({
     onSelectedObjectIdChange('new');
     setDraft(createNewMetadataDraft());
     setValidationIssues([]);
+    setSelectedObjectSnapshot(null);
     if (isCompact)
       onOpenEditor?.();
   }
@@ -108,6 +113,7 @@ export function MetadataManager({
     if (selectedObject) {
       setDraft(toMetadataDraft(selectedObject));
       setValidationIssues([]);
+      setSelectedObjectSnapshot(selectedObject);
       return;
     }
 
@@ -198,6 +204,7 @@ export function MetadataManager({
       onSelectedObjectIdChange(savedObject.id);
       setDraft(toMetadataDraft(savedObject));
       setValidationIssues([]);
+      setSelectedObjectSnapshot(savedObject);
       onNotice('Metadata object saved.');
     } catch (error) {
       const validation = getValidationDetails(error);
@@ -367,6 +374,10 @@ export function MetadataManager({
               </div>
             )}
 
+            {selectedObjectSnapshot && selectedObjectId !== 'new' && draft.id === selectedObjectSnapshot.id && (
+              <MetadataChangeWarnings original={selectedObjectSnapshot} draft={draft} />
+            )}
+
             <div className="metadata-actions">
               <button className="secondary-button" type="button" onClick={discardDraft} disabled={isSaving}>
                 <X size={16} aria-hidden="true" />
@@ -394,6 +405,173 @@ export function MetadataManager({
       )}
     </section>
   );
+}
+
+function MetadataChangeWarnings({
+  original,
+  draft
+}: {
+  original: ObjectMetadata;
+  draft: ObjectMetadataUpsertRequest;
+}) {
+  const warnings = getMetadataChangeWarnings(original, draft);
+
+  if (warnings.length === 0)
+    return null;
+
+  return (
+    <div className="metadata-warning-panel">
+      <div className="panel-heading">
+        <h3>Potential breaking changes</h3>
+        <span className="status-pill warning">Review before saving</span>
+      </div>
+      <div className="issue-list metadata-issues">
+        {warnings.map((warning, index) => (
+          <div className="issue-row issue-warning" key={`${warning.field ?? 'warning'}-${index}`}>
+            <span>
+              <em>Warning</em>
+              <strong>{warning.title}</strong>
+              <small>{warning.message}</small>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type MetadataWarning = {
+  title: string;
+  message: string;
+  field?: string;
+};
+
+function getMetadataChangeWarnings(original: ObjectMetadata, draft: ObjectMetadataUpsertRequest): MetadataWarning[] {
+  const warnings: MetadataWarning[] = [];
+
+  if (original.name !== draft.name) {
+    warnings.push({
+      title: 'Object name changed',
+      message: 'Renaming the object can break workflows, references, and any code that looks it up by name.',
+      field: 'name'
+    });
+  }
+
+  if (original.tableName !== draft.tableName) {
+    warnings.push({
+      title: 'Table name changed',
+      message: 'Renaming the table can break the existing physical database table unless a migration is applied.',
+      field: 'tableName'
+    });
+  }
+
+  const originalIdProperty = original.properties.find(property => property.isPrimaryKey || property.name === 'Id');
+  const draftIdProperty = draft.properties.find(property => property.isPrimaryKey || property.name === 'Id');
+
+  if (!draftIdProperty) {
+    warnings.push({
+      title: 'Id property removed',
+      message: 'Removing the Id property can break record reads, updates, and identity handling.',
+      field: 'properties'
+    });
+  } else {
+    if (draftIdProperty.columnName !== 'Id') {
+      warnings.push({
+        title: 'Id column changed',
+        message: 'Changing the Id column can break the primary key mapping used by the runtime.',
+        field: 'properties.Id.columnName'
+      });
+    }
+
+    if (draftIdProperty.clrType !== 'Guid') {
+      warnings.push({
+        title: 'Id type changed',
+        message: 'The runtime expects the Id property to stay a Guid primary key.',
+        field: 'properties.Id.clrType'
+      });
+    }
+
+    if (originalIdProperty && originalIdProperty.name !== draftIdProperty.name) {
+      warnings.push({
+        title: 'Primary key identity changed',
+        message: 'Changing the identity of the primary key can break existing data mappings.',
+        field: 'properties.Id'
+      });
+    }
+  }
+
+  const originalPropertiesByName = new Map(original.properties.map(property => [property.name.toLowerCase(), property] as const));
+  const draftPropertiesByName = new Map(draft.properties.map(property => [property.name.toLowerCase(), property] as const));
+
+  for (const originalProperty of original.properties) {
+    const draftProperty = draftPropertiesByName.get(originalProperty.name.toLowerCase());
+    if (!draftProperty) {
+      warnings.push({
+        title: `Property removed: ${originalProperty.name}`,
+        message: 'Deleting a property can break existing records, saved forms, and workflow expressions that expect the field.',
+        field: `properties.${originalProperty.name}`
+      });
+      continue;
+    }
+
+    if (originalProperty.columnName !== draftProperty.columnName) {
+      warnings.push({
+        title: `Column renamed: ${originalProperty.name}`,
+        message: 'Changing a column name can break the existing database schema without a migration.',
+        field: `properties.${originalProperty.name}.columnName`
+      });
+    }
+
+    if (originalProperty.clrType !== draftProperty.clrType) {
+      warnings.push({
+        title: `Type changed: ${originalProperty.name}`,
+        message: 'Changing the CLR type can make existing stored values fail to read or save correctly.',
+        field: `properties.${originalProperty.name}.clrType`
+      });
+    }
+
+    if (originalProperty.isPrimaryKey !== draftProperty.isPrimaryKey) {
+      warnings.push({
+        title: `Primary key changed: ${originalProperty.name}`,
+        message: 'Changing which field acts as the primary key can invalidate existing records.',
+        field: `properties.${originalProperty.name}.isPrimaryKey`
+      });
+    }
+
+    if (originalProperty.isRequired !== draftProperty.isRequired) {
+      warnings.push({
+        title: `Required flag changed: ${originalProperty.name}`,
+        message: 'Tightening required fields can make existing rows or future saves invalid.',
+        field: `properties.${originalProperty.name}.isRequired`
+      });
+    }
+
+    if (originalProperty.isUnique !== draftProperty.isUnique) {
+      warnings.push({
+        title: `Uniqueness changed: ${originalProperty.name}`,
+        message: 'Adding uniqueness can fail if duplicate values already exist in stored records.',
+        field: `properties.${originalProperty.name}.isUnique`
+      });
+    }
+  }
+
+  for (const draftProperty of draft.properties) {
+    if (originalPropertiesByName.has(draftProperty.name.toLowerCase()))
+      continue;
+
+    if (draftProperty.name === 'Id')
+      continue;
+
+    if (draftProperty.isPrimaryKey) {
+      warnings.push({
+        title: `New primary key added: ${draftProperty.name}`,
+        message: 'Adding another primary key can conflict with the existing Id-based runtime assumptions.',
+        field: `properties.${draftProperty.name}.isPrimaryKey`
+      });
+    }
+  }
+
+  return warnings;
 }
 
 interface MetadataPropertyCardProps {

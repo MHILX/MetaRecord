@@ -2,6 +2,7 @@ import type {
   MetadataValidationResponse,
   MetadataRecordSaveRequest,
   MetadataRecordSaveResponse,
+  MetadataRecordValues,
   ObjectMetadataUpsertRequest,
   ObjectMetadata,
   WorkflowDefinition,
@@ -72,6 +73,7 @@ export const workflowApi = {
     method: 'POST',
     body: JSON.stringify(requestBody)
   }),
+  listRecords: (objectId: string) => request<MetadataRecordValues[]>(`/api/metadata/objects/${encodeURIComponent(objectId)}/records`),
   updateObject: (id: string, requestBody: ObjectMetadataUpsertRequest) => request<ObjectMetadata>(`/api/metadata/objects/${id}`, {
     method: 'PUT',
     body: JSON.stringify(requestBody)

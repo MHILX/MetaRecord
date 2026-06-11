@@ -229,6 +229,13 @@ public sealed class MetadataApiTests
         Assert.False(updatedRecord.IsNew);
         Assert.Equal(recordId.ToString(), updatedRecord.RecordId);
 
+        var recordList = await client.GetFromJsonAsync<Dictionary<string, JsonElement>[]>($"/api/metadata/objects/{objectId}/records", JsonOptions);
+
+        Assert.NotNull(recordList);
+        Assert.Single(recordList);
+        Assert.Equal(recordId.ToString(), recordList[0]["Id"].GetString());
+        Assert.Equal("Notebook B", recordList[0]["Title"].GetString());
+
         using var connection = new SqliteConnection($"Data Source={factory.DbPath}");
         connection.Open();
 
