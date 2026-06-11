@@ -187,6 +187,59 @@ public sealed class MetadataApiTests
         Assert.Contains(validation.Issues, issue => issue.Field == "id");
     }
 
+    [Fact]
+    public async Task Metadata_record_save_inserts_and_updates_rows()
+    {
+        using var factory = new MetaRecordWebApiFactory();
+        var client = factory.CreateClient();
+        var objectId = Guid.NewGuid();
+        var request = CreateNotebookRequest(objectId);
+
+        var createMetadataResponse = await client.PostAsJsonAsync("/api/metadata/objects", request);
+        createMetadataResponse.EnsureSuccessStatusCode();
+
+        var recordId = Guid.NewGuid();
+        var createRecordResponse = await client.PostAsJsonAsync(
+            $"/api/metadata/objects/{objectId}/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(recordId, JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Notebook A", JsonOptions)
+            }));
+
+        var createdRecord = await createRecordResponse.Content.ReadFromJsonAsync<MetadataRecordSaveResponse>(JsonOptions);
+
+        createRecordResponse.EnsureSuccessStatusCode();
+        Assert.NotNull(createdRecord);
+        Assert.True(createdRecord.IsNew);
+        Assert.Equal(recordId.ToString(), createdRecord.RecordId);
+
+        var updateRecordResponse = await client.PostAsJsonAsync(
+            $"/api/metadata/objects/{objectId}/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(recordId, JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Notebook B", JsonOptions)
+            }));
+
+        var updatedRecord = await updateRecordResponse.Content.ReadFromJsonAsync<MetadataRecordSaveResponse>(JsonOptions);
+
+        updateRecordResponse.EnsureSuccessStatusCode();
+        Assert.NotNull(updatedRecord);
+        Assert.False(updatedRecord.IsNew);
+        Assert.Equal(recordId.ToString(), updatedRecord.RecordId);
+
+        using var connection = new SqliteConnection($"Data Source={factory.DbPath}");
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Title FROM Notebooks WHERE Id = @Id";
+        command.Parameters.AddWithValue("@Id", recordId.ToString());
+
+        var savedTitle = command.ExecuteScalar() as string;
+        Assert.Equal("Notebook B", savedTitle);
+    }
+
     private static ObjectMetadataUpsertRequest CreateNotebookRequest(Guid id) => new(
         id,
         "Notebook",
@@ -201,6 +254,8 @@ public sealed class MetadataApiTests
     {
         private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"metarecord-web-{Guid.NewGuid():N}.db");
         private readonly string? _previousDbPath;
+
+        public string DbPath => _dbPath;
 
         public MetaRecordWebApiFactory()
         {

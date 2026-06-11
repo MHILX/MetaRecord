@@ -51,7 +51,7 @@ button:disabled {
 
 .editor-shell {
   display: grid;
-  grid-template-rows: 64px auto minmax(0, 1fr) 260px;
+  grid-template-rows: 64px auto minmax(0, 1fr);
   height: 100vh;
   min-height: 0;
   min-width: 960px;
@@ -82,7 +82,7 @@ button:disabled {
 
 .metadata-page-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 330px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
   overflow: hidden;
@@ -96,20 +96,13 @@ button:disabled {
   align-content: start;
 }
 
-.metadata-page-content {
+.metadata-page-sidebar {
+  min-height: 0;
   overflow: auto;
 }
 
-.metadata-load-form {
-  display: grid;
-  gap: 10px;
-}
-
-.metadata-load-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+.metadata-page-content {
+  overflow: hidden;
 }
 
 .metadata-catalog-list {
@@ -197,6 +190,37 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.metadata-save-status {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.metadata-save-status strong {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.metadata-save-status span {
+  color: #415064;
+}
+
+.metadata-save-status.success {
+  border-color: #9bd7be;
+  background: #ecfaf3;
+  color: var(--success);
+}
+
+.metadata-save-status.error {
+  border-color: #e1b0bb;
+  background: #fff5f7;
+  color: var(--danger);
+}
+
 .metadata-property-table-wrapper {
   overflow: auto;
   border: 1px solid var(--panel-border);
@@ -255,12 +279,64 @@ button:disabled {
 .editor-toolbar {
   grid-row: 1;
   display: grid;
-  grid-template-columns: minmax(220px, 280px) 1fr auto;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--panel-border);
   background: #ffffff;
+}
+
+.editor-toolbar .primary-nav {
+  grid-column: 2;
+}
+
+.metadata-page-header .primary-nav {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.primary-nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  margin-left: auto;
+  gap: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  flex-wrap: wrap;
+}
+
+.primary-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: auto;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: #556579;
+  text-decoration: none;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.primary-nav-link:hover {
+  color: #27415f;
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+.primary-nav-link[aria-current='page'] {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .app-title,
@@ -396,15 +472,50 @@ button:disabled {
 .editor-layout {
   grid-row: 3;
   display: grid;
-  grid-template-columns: 310px minmax(420px, 1fr) 340px;
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
   overflow: hidden;
   padding: 10px;
 }
 
-.editor-layout.inspector-collapsed {
-  grid-template-columns: 310px minmax(0, 1fr) 0;
+.workflow-sidebar {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workflow-sidebar-tabs {
+  width: 100%;
+}
+
+.workflow-sidebar-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workflow-sidebar-panel {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.workflow-workflow-panel,
+.workflow-inspector-panel {
+  height: 100%;
+}
+
+.workflow-workflow-panel > .left-rail,
+.workflow-inspector-panel > .panel {
+  height: 100%;
+}
+
+.workflow-runs-panel {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  overflow: hidden;
 }
 
 .left-rail,
@@ -417,6 +528,7 @@ button:disabled {
 
 .left-rail {
   grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
 }
 
 .left-rail-toolbar {
@@ -436,14 +548,6 @@ button:disabled {
   flex: none;
   margin-left: auto;
   white-space: nowrap;
-}
-
-.right-rail {
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.editor-layout.inspector-collapsed .right-rail {
-  display: none;
 }
 
 .bottom-rail-toolbar {
@@ -671,8 +775,52 @@ textarea {
 }
 
 .canvas-column {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
   overflow: hidden;
   background: var(--canvas);
+  min-height: 0;
+  padding: 10px;
+}
+
+.canvas-workflow-toolbar {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.canvas-workflow-toolbar-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.canvas-workflow-toolbar-meta strong,
+.canvas-workflow-toolbar-empty strong {
+  display: block;
+  font-size: 14px;
+}
+
+.canvas-workflow-toolbar-meta span,
+.canvas-workflow-toolbar-empty span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.canvas-workflow-toolbar-fields input,
+.canvas-workflow-toolbar-fields select {
+  width: min(360px, 100%);
+}
+
+.canvas-workflow-toolbar-actions {
+  flex-wrap: wrap;
+}
+
+.canvas-workflow-toolbar-empty {
+  display: grid;
+  gap: 4px;
 }
 
 .workflow-canvas-shell,
@@ -982,69 +1130,6 @@ textarea {
   min-height: 0;
 }
 
-.panel-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: rgba(14, 24, 40, 0.58);
-  backdrop-filter: blur(6px);
-}
-
-.panel-dialog {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 12px;
-  width: min(1160px, calc(100vw - 32px));
-  height: min(780px, calc(100vh - 32px));
-  padding: 16px;
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 24px 80px rgba(17, 24, 39, 0.35);
-}
-
-.panel-dialog-metadata {
-  width: min(1024px, calc(100vw - 32px));
-  height: min(720px, calc(100vh - 32px));
-  padding: 12px;
-}
-
-.panel-dialog-header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.panel-dialog-header span {
-  display: block;
-  color: var(--text-muted);
-  font-size: 12px;
-  margin-bottom: 2px;
-}
-
-.panel-dialog-header h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.panel-dialog-tabs {
-  width: 100%;
-}
-
-.panel-dialog-body {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.panel-dialog-body > .panel,
-.panel-dialog-body > .bottom-panel-section {
-  height: 100%;
-}
-
 .bottom-rail-panel {
   display: none;
   min-height: 0;
@@ -1213,7 +1298,7 @@ code {
     min-width: 0;
     height: auto;
     min-height: 100vh;
-    grid-template-rows: auto auto auto auto;
+    grid-template-rows: auto auto auto;
   }
 
   .editor-toolbar,
@@ -1265,10 +1350,5 @@ code {
 
   .metadata-property-grid {
     grid-template-columns: 1fr;
-  }
-
-  .panel-dialog {
-    width: calc(100vw - 24px);
-    height: calc(100vh - 24px);
   }
 }

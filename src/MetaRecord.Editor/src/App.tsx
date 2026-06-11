@@ -16,17 +16,9 @@ export function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  function openWorkflowEditor() {
-    window.location.hash = '#workflow';
-  }
-
-  function openMetadataViewer() {
-    window.location.hash = '#metadata';
-  }
-
   return page === 'metadata'
-    ? <MetadataViewerPage onOpenWorkflowEditor={openWorkflowEditor} />
-    : <WorkflowEditor onOpenMetadataViewer={openMetadataViewer} />;
+    ? <MetadataViewerPage />
+    : <WorkflowEditor />;
 }
 
 function getPageFromHash(): EditorPage {

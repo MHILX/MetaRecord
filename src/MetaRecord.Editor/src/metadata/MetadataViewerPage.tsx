@@ -1,25 +1,29 @@
-import { ArrowLeft, Database, RefreshCcw, Search } from 'lucide-react';
+import { Database, Save } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { ApiError, workflowApi } from '../api/client';
 import type { ObjectMetadata, PropertyMetadata } from '../api/types';
-
-interface MetadataViewerPageProps {
-  onOpenWorkflowEditor: () => void;
-}
+import { EditorPrimaryNav } from '../navigation/EditorPrimaryNav';
+import { MetadataManager, type MetadataSelectionId } from '../workflow/MetadataManager';
 
 type MetadataFormValues = Record<string, string>;
 
+type PageNotice = {
+  message: string;
+  kind: 'info' | 'error';
+};
+
 const guidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
 
-export function MetadataViewerPage({ onOpenWorkflowEditor }: MetadataViewerPageProps) {
+export function MetadataViewerPage() {
   const [objects, setObjects] = useState<ObjectMetadata[]>([]);
-  const [lookupValue, setLookupValue] = useState('');
+  const [selectedMetadataObjectId, setSelectedMetadataObjectId] = useState<MetadataSelectionId>(null);
   const [selectedObject, setSelectedObject] = useState<ObjectMetadata | null>(null);
   const [formValues, setFormValues] = useState<MetadataFormValues>({});
   const [isLoadingObjects, setIsLoadingObjects] = useState(true);
-  const [isLoadingObject, setIsLoadingObject] = useState(false);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [objectError, setObjectError] = useState<string | null>(null);
+  const [isSavingRecord, setIsSavingRecord] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [metadataNotice, setMetadataNotice] = useState<PageNotice | null>(null);
 
   useEffect(() => {
     void loadObjects();
@@ -28,18 +32,54 @@ export function MetadataViewerPage({ onOpenWorkflowEditor }: MetadataViewerPageP
   useEffect(() => {
     if (selectedObject) {
       setFormValues(createFormValues(selectedObject));
+      setSaveMessage(null);
+      setSaveError(null);
       return;
     }
 
     setFormValues({});
   }, [selectedObject]);
 
+  useEffect(() => {
+    if (!saveMessage)
+      return;
+
+    const timeoutId = window.setTimeout(() => setSaveMessage(null), 2500);
+    return () => window.clearTimeout(timeoutId);
+  }, [saveMessage]);
+
+  useEffect(() => {
+    if (!metadataNotice || metadataNotice.kind === 'error')
+      return;
+
+    const timeoutId = window.setTimeout(() => setMetadataNotice(null), 2500);
+    return () => window.clearTimeout(timeoutId);
+  }, [metadataNotice]);
+
+  useEffect(() => {
+    if (selectedMetadataObjectId === null)
+      return;
+
+    if (selectedMetadataObjectId === 'new') {
+      setSelectedObject(null);
+      setSaveMessage(null);
+      setSaveError(null);
+      return;
+    }
+
+    const nextObject = objects.find(metadataObject => metadataObject.id === selectedMetadataObjectId) ?? null;
+    if (!nextObject || nextObject.id === selectedObject?.id)
+      return;
+
+    setSelectedObject(nextObject);
+    setSaveMessage(null);
+    setSaveError(null);
+  }, [objects, selectedMetadataObjectId, selectedObject?.id]);
+
   const selectedPropertyCount = selectedObject?.properties.length ?? 0;
-  const formattedJson = JSON.stringify(formValues, null, 2);
 
   async function loadObjects() {
     setIsLoadingObjects(true);
-    setCatalogError(null);
 
     try {
       const nextObjects = await workflowApi.listObjects();
@@ -49,52 +89,11 @@ export function MetadataViewerPage({ onOpenWorkflowEditor }: MetadataViewerPageP
         const refreshedSelection = nextObjects.find(metadataObject => metadataObject.id === selectedObject.id) ?? null;
         setSelectedObject(refreshedSelection);
       }
-
-      if (lookupValue.trim().length === 0) {
-        setLookupValue(nextObjects[0]?.name ?? '');
-      }
     } catch (error) {
-      setCatalogError(getErrorMessage(error, 'Could not load metadata objects.'));
+      showMetadataNotice(getErrorMessage(error, 'Could not load metadata objects.'), 'error');
     } finally {
       setIsLoadingObjects(false);
     }
-  }
-
-  async function loadObject(identifier: string) {
-    const trimmedIdentifier = identifier.trim();
-    if (trimmedIdentifier.length === 0) {
-      setObjectError('Enter a metadata object name or GUID.');
-      setSelectedObject(null);
-      return;
-    }
-
-    setIsLoadingObject(true);
-    setObjectError(null);
-
-    try {
-      const nextObject = guidPattern.test(trimmedIdentifier)
-        ? await workflowApi.getObjectById(trimmedIdentifier)
-        : await workflowApi.getObject(trimmedIdentifier);
-
-      setSelectedObject(nextObject);
-      setLookupValue(nextObject.name);
-    } catch (error) {
-      setSelectedObject(null);
-      setObjectError(getErrorMessage(error, `Could not load metadata object "${trimmedIdentifier}".`));
-    } finally {
-      setIsLoadingObject(false);
-    }
-  }
-
-  function handleLookupSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void loadObject(lookupValue);
-  }
-
-  function openCatalogObject(metadataObject: ObjectMetadata) {
-    setLookupValue(metadataObject.name);
-    setSelectedObject(metadataObject);
-    setObjectError(null);
   }
 
   function updateFormValue(propertyName: string, value: string) {
@@ -109,10 +108,28 @@ export function MetadataViewerPage({ onOpenWorkflowEditor }: MetadataViewerPageP
       setFormValues(createFormValues(selectedObject));
   }
 
-  function clearSelection() {
-    setLookupValue('');
-    setSelectedObject(null);
-    setObjectError(null);
+  function showMetadataNotice(message: string, kind: 'info' | 'error' = 'info') {
+    setMetadataNotice({ message, kind });
+  }
+
+  async function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedObject)
+      return;
+
+    setIsSavingRecord(true);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    try {
+      const result = await workflowApi.saveRecord(selectedObject.id, { values: formValues });
+      setSaveMessage(`${result.isNew ? 'Saved' : 'Updated'} record ${result.recordId} in ${selectedObject.tableName}.`);
+    } catch (error) {
+      setSaveError(getErrorMessage(error, 'Could not save the record.'));
+    } finally {
+      setIsSavingRecord(false);
+    }
   }
 
   return (
@@ -121,107 +138,32 @@ export function MetadataViewerPage({ onOpenWorkflowEditor }: MetadataViewerPageP
         <div className="app-title">
           <Database size={21} aria-hidden="true" />
           <div>
-            <h1>Metadata Viewer</h1>
-            <span>Load a metadata object by name or GUID and render its properties as a form.</span>
+            <h1>Metadata Workspace</h1>
+            <span>Create and edit metadata objects, then load one to view its rendered form.</span>
           </div>
         </div>
 
-        <div className="toolbar-actions">
-          <button className="secondary-button" type="button" onClick={onOpenWorkflowEditor}>
-            <ArrowLeft size={16} aria-hidden="true" />
-            Workflow Editor
-          </button>
-          <button className="secondary-button" type="button" onClick={() => void loadObjects()} disabled={isLoadingObjects}>
-            <RefreshCcw size={16} aria-hidden="true" />
-            Refresh list
-          </button>
-        </div>
+        <EditorPrimaryNav activePage="metadata" />
       </header>
 
       <section className="metadata-page-layout">
-        <aside className="panel metadata-page-sidebar">
-          <div className="panel-heading">
-            <h2>Load object</h2>
-            <span className="status-pill">{objects.length} available</span>
-          </div>
+        {metadataNotice && <div className="notice-bar">{metadataNotice.message}</div>}
 
-          <form className="metadata-load-form" onSubmit={handleLookupSubmit}>
-            <label className="field-control">
-              <span>Object name or GUID</span>
-              <input
-                value={lookupValue}
-                onChange={event => setLookupValue(event.target.value)}
-                placeholder="Product or 5f8d1d19-..."
-                autoComplete="off"
-              />
-            </label>
-
-            <div className="metadata-load-actions">
-              <button className="primary-button" type="submit" disabled={isLoadingObject || lookupValue.trim().length === 0}>
-                <Search size={16} aria-hidden="true" />
-                Load
-              </button>
-              <button className="secondary-button" type="button" onClick={clearSelection}>
-                Clear
-              </button>
-            </div>
-          </form>
-
-          <p className="metadata-help">
-            If the value looks like a GUID, the page loads by id; otherwise it loads by name.
-          </p>
-
-          {(catalogError || objectError) && (
-            <div className="metadata-issues issue-list">
-              {catalogError && (
-                <div className="issue-row issue-error">
-                  <span>
-                    <em>Error</em>
-                    <strong>catalog</strong>
-                    <small>{catalogError}</small>
-                  </span>
-                </div>
-              )}
-              {objectError && (
-                <div className="issue-row issue-error">
-                  <span>
-                    <em>Error</em>
-                    <strong>load</strong>
-                    <small>{objectError}</small>
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="metadata-object-list metadata-catalog-list">
-            {isLoadingObjects ? (
-              <p className="metadata-help">Loading metadata objects...</p>
-            ) : objects.length === 0 ? (
-              <p className="metadata-help">No metadata objects are available yet.</p>
-            ) : (
-              objects.map(metadataObject => (
-                <button
-                  className={`workflow-list-item ${selectedObject?.id === metadataObject.id ? 'selected' : ''}`}
-                  key={metadataObject.id}
-                  type="button"
-                  onClick={() => openCatalogObject(metadataObject)}
-                >
-                  <Database size={16} aria-hidden="true" />
-                  <span>
-                    <strong>{metadataObject.name}</strong>
-                    <small>{metadataObject.tableName}</small>
-                  </span>
-                  <em>{metadataObject.properties.length} props</em>
-                </button>
-              ))
-            )}
-          </div>
+        <aside className="metadata-page-sidebar">
+          <MetadataManager
+            metadataObjects={objects}
+            isLoading={isLoadingObjects}
+            selectedObjectId={selectedMetadataObjectId}
+            onSelectedObjectIdChange={setSelectedMetadataObjectId}
+            onMetadataObjectsChange={setObjects}
+            onRefreshMetadata={loadObjects}
+            onNotice={showMetadataNotice}
+          />
         </aside>
 
         <section className="panel metadata-page-content" aria-live="polite">
           {selectedObject ? (
-            <form className="metadata-viewer-stack metadata-form-preview" onSubmit={event => event.preventDefault()}>
+            <form className="metadata-viewer-stack metadata-form-preview" onSubmit={handleFormSubmit}>
               <div className="metadata-viewer-summary-grid">
                 <div className="metadata-object-summary">
                   <span>Object id</span>
@@ -246,7 +188,7 @@ export function MetadataViewerPage({ onOpenWorkflowEditor }: MetadataViewerPageP
                   <span className="status-pill">{selectedPropertyCount} {selectedPropertyCount === 1 ? 'field' : 'fields'}</span>
                 </div>
 
-                <p className="metadata-help">These inputs are generated from the selected metadata object and seeded with sample values so you can see the form layout.</p>
+                <p className="metadata-help">These inputs are generated from the selected metadata object and seeded with sample values so you can save a record directly to the database.</p>
 
                 <div className="metadata-form-grid">
                   {selectedObject.properties.length === 0 ? (
@@ -267,10 +209,18 @@ export function MetadataViewerPage({ onOpenWorkflowEditor }: MetadataViewerPageP
                   <button className="secondary-button" type="button" onClick={resetFormValues} disabled={selectedObject.properties.length === 0}>
                     Reset sample values
                   </button>
-                  <button className="primary-button" type="submit" disabled={selectedObject.properties.length === 0}>
-                    Preview form submit
+                  <button className="primary-button" type="submit" disabled={selectedObject.properties.length === 0 || isSavingRecord}>
+                    <Save size={16} aria-hidden="true" />
+                    {isSavingRecord ? 'Saving...' : 'Save record'}
                   </button>
                 </div>
+
+                {(saveMessage || saveError) && (
+                  <div className={saveError ? 'metadata-save-status error' : 'metadata-save-status success'}>
+                    <strong>{saveError ? 'Save failed' : 'Saved'}</strong>
+                    <span>{saveError ?? saveMessage}</span>
+                  </div>
+                )}
               </section>
 
               <section className="metadata-viewer-section">
@@ -279,7 +229,7 @@ export function MetadataViewerPage({ onOpenWorkflowEditor }: MetadataViewerPageP
                   <span className="muted">Live form state</span>
                 </div>
 
-                <pre className="metadata-json">{formattedJson}</pre>
+                <pre className="metadata-json">{JSON.stringify(formValues, null, 2)}</pre>
               </section>
             </form>
           ) : (

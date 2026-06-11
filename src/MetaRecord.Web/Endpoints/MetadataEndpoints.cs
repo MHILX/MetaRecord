@@ -1,3 +1,4 @@
+using System.Globalization;
 using MetaRecord.Data;
 using MetaRecord.Models;
 using MetaRecord.Services;
@@ -113,6 +114,196 @@ public static class MetadataEndpoints
             return Results.NoContent();
         });
 
+        group.MapPost("/objects/{id:guid}/records", async (
+            Guid id,
+            MetadataRecordSaveRequest request,
+            MetadataRepository repository,
+            EntityStore entityStore) =>
+        {
+            var metadata = await repository.GetByIdAsync(id);
+            if (metadata is null)
+                return Results.NotFound();
+
+            if (request.Values is null || request.Values.Count == 0)
+            {
+                return Results.BadRequest(new
+                {
+                    message = "No record values were provided."
+                });
+            }
+
+            try
+            {
+                var values = NormalizeRecordValues(metadata, ApiMappings.ToObjectDictionary(request.Values));
+                var recordId = ResolveRecordId(metadata, values);
+
+                entityStore.EnsureTableExists(metadata);
+
+                var existingValues = entityStore.FindValues(metadata, recordId);
+                var isNew = existingValues.Count == 0;
+                if (isNew)
+                    entityStore.InsertValues(metadata, values);
+                else
+                    entityStore.UpdateValues(metadata, recordId, values);
+
+                var response = new MetadataRecordSaveResponse(recordId.ToString(), isNew);
+                return isNew
+                    ? Results.Created($"/api/metadata/objects/{id}/records/{recordId}", response)
+                    : Results.Ok(response);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new
+                {
+                    message = ex.Message
+                });
+            }
+        });
+
         return app;
     }
+
+    private static Dictionary<string, object?> NormalizeRecordValues(IObjectMetadata metadata, IReadOnlyDictionary<string, object?> rawValues)
+    {
+        var values = new Dictionary<string, object?>(rawValues, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var property in metadata.Properties)
+        {
+            if (!values.TryGetValue(property.Name, out var rawValue))
+                continue;
+
+            values[property.Name] = NormalizeRecordValue(property, rawValue);
+        }
+
+        return values;
+    }
+
+    private static object? NormalizeRecordValue(PropertyMetadata property, object? rawValue)
+    {
+        if (rawValue is null)
+            return null;
+
+        var targetType = Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
+        if (targetType == typeof(string))
+            return rawValue.ToString();
+
+        var textValue = rawValue.ToString();
+        if (string.IsNullOrWhiteSpace(textValue))
+            return null;
+
+        if (targetType == typeof(Guid))
+        {
+            if (rawValue is Guid guidValue)
+                return guidValue;
+
+            if (Guid.TryParse(textValue, out var parsedGuid))
+                return parsedGuid;
+
+            throw new InvalidOperationException($"The '{property.Name}' field must be a GUID.");
+        }
+
+        if (targetType == typeof(bool))
+        {
+            if (rawValue is bool boolValue)
+                return boolValue;
+
+            if (bool.TryParse(textValue, out var parsedBool))
+                return parsedBool;
+
+            if (textValue == "1")
+                return true;
+            if (textValue == "0")
+                return false;
+
+            throw new InvalidOperationException($"The '{property.Name}' field must be a boolean.");
+        }
+
+        if (targetType == typeof(int))
+        {
+            if (rawValue is int intValue)
+                return intValue;
+
+            if (int.TryParse(textValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedInt))
+                return parsedInt;
+
+            throw new InvalidOperationException($"The '{property.Name}' field must be an integer.");
+        }
+
+        if (targetType == typeof(long))
+        {
+            if (rawValue is long longValue)
+                return longValue;
+
+            if (long.TryParse(textValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedLong))
+                return parsedLong;
+
+            throw new InvalidOperationException($"The '{property.Name}' field must be a whole number.");
+        }
+
+        if (targetType == typeof(decimal))
+        {
+            if (rawValue is decimal decimalValue)
+                return decimalValue;
+
+            if (decimal.TryParse(textValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedDecimal))
+                return parsedDecimal;
+
+            throw new InvalidOperationException($"The '{property.Name}' field must be a decimal number.");
+        }
+
+        if (targetType == typeof(double))
+        {
+            if (rawValue is double doubleValue)
+                return doubleValue;
+
+            if (double.TryParse(textValue, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsedDouble))
+                return parsedDouble;
+
+            throw new InvalidOperationException($"The '{property.Name}' field must be a number.");
+        }
+
+        if (targetType == typeof(DateTime))
+        {
+            if (rawValue is DateTime dateTimeValue)
+                return dateTimeValue;
+
+            if (DateTime.TryParse(textValue, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedDateTime))
+                return parsedDateTime;
+
+            throw new InvalidOperationException($"The '{property.Name}' field must be a valid date and time value.");
+        }
+
+        return rawValue;
+    }
+
+    private static Guid ResolveRecordId(IObjectMetadata metadata, IDictionary<string, object?> values)
+    {
+        var keyProperty = GetPrimaryKeyProperty(metadata);
+        var keyName = keyProperty?.Name ?? "Id";
+
+        if (!values.TryGetValue(keyName, out var rawValue) || rawValue is null)
+        {
+            var generatedId = Guid.NewGuid();
+            values[keyName] = generatedId;
+            return generatedId;
+        }
+
+        if (rawValue is Guid guidValue)
+        {
+            values[keyName] = guidValue;
+            return guidValue;
+        }
+
+        if (Guid.TryParse(rawValue.ToString(), out var parsedId))
+        {
+            values[keyName] = parsedId;
+            return parsedId;
+        }
+
+        throw new InvalidOperationException($"The '{keyName}' field must be a GUID.");
+    }
+
+    private static PropertyMetadata? GetPrimaryKeyProperty(IObjectMetadata metadata) =>
+        metadata.Properties.FirstOrDefault(property => property.IsPrimaryKey) ??
+        metadata.Properties.FirstOrDefault(property => property.Name == "Id");
 }

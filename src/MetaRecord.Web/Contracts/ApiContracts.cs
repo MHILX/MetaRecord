@@ -44,6 +44,13 @@ public sealed record ObjectMetadataResponse(
     string TableName,
     IReadOnlyList<PropertyMetadataResponse> Properties);
 
+public sealed record MetadataRecordSaveRequest(
+    Dictionary<string, JsonElement>? Values);
+
+public sealed record MetadataRecordSaveResponse(
+    string RecordId,
+    bool IsNew);
+
 public sealed record PropertyMetadataResponse(
     string Name,
     string ColumnName,

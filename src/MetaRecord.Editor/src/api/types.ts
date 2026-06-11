@@ -31,6 +31,15 @@ export interface ObjectMetadata {
   properties: PropertyMetadata[];
 }
 
+export interface MetadataRecordSaveRequest {
+  values: Record<string, unknown>;
+}
+
+export interface MetadataRecordSaveResponse {
+  recordId: string;
+  isNew: boolean;
+}
+
 export interface PropertyMetadataUpsertRequest {
   name: string;
   columnName: string;
