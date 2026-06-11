@@ -19,6 +19,7 @@ interface MetadataManagerProps {
   onNotice: (message: string, kind?: 'info' | 'error') => void;
   showDetails?: boolean;
   showObjectList?: boolean;
+  showCreateButton?: boolean;
   onOpenEditor?: () => void;
 }
 
@@ -36,6 +37,7 @@ export function MetadataManager({
   onNotice,
   showDetails = true,
   showObjectList = true,
+  showCreateButton = true,
   onOpenEditor
 }: MetadataManagerProps) {
   const [draft, setDraft] = useState<ObjectMetadataUpsertRequest>(createNewMetadataDraft);
@@ -43,6 +45,7 @@ export function MetadataManager({
   const [isSaving, setIsSaving] = useState(false);
   const isCompact = showDetails === false;
   const shouldShowObjectList = showObjectList !== false;
+  const shouldShowCreateButton = showCreateButton !== false;
 
   useEffect(() => {
     if (isLoading)
@@ -254,10 +257,12 @@ export function MetadataManager({
         <div className="panel-heading">
           <h2>Metadata</h2>
           <div className="metadata-heading-actions">
-            <button className="secondary-button" type="button" onClick={openNewObject}>
-              <FilePlus2 size={16} aria-hidden="true" />
-              New
-            </button>
+            {shouldShowCreateButton && (
+              <button className="secondary-button" type="button" onClick={openNewObject}>
+                <FilePlus2 size={16} aria-hidden="true" />
+                New
+              </button>
+            )}
             <button className="icon-button" type="button" onClick={refreshMetadataObjects} title="Refresh metadata objects">
               <RefreshCcw size={16} aria-hidden="true" />
             </button>
@@ -267,19 +272,6 @@ export function MetadataManager({
 
       {shouldShowObjectList && (
         <div className="metadata-object-list">
-          <button
-            className={`workflow-list-item ${selectedObjectId === 'new' ? 'selected' : ''}`}
-            type="button"
-            onClick={openNewObject}
-          >
-            <Database size={16} aria-hidden="true" />
-            <span>
-              <strong>New object</strong>
-              <small>Unsaved draft</small>
-            </span>
-            <em>Draft</em>
-          </button>
-
           {metadataObjects.map(metadataObject => (
             <button
               className={`workflow-list-item ${selectedObjectId === metadataObject.id ? 'selected' : ''}`}
@@ -298,10 +290,22 @@ export function MetadataManager({
         </div>
       )}
 
-      {isCompact ? (
-        <p className="metadata-help">Open the popup to edit object details.</p>
-      ) : (
+      {isCompact ? null : (
         <>
+          {!shouldShowObjectList && (
+            <div className="panel-heading">
+              <h2>Metadata object</h2>
+              <div className="metadata-heading-actions">
+                {shouldShowCreateButton && (
+                  <button className="secondary-button" type="button" onClick={openNewObject}>
+                    <FilePlus2 size={16} aria-hidden="true" />
+                    New
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="metadata-object-summary">
             <span>{selectedObjectId === 'new' ? 'Draft object' : 'Saved object'}</span>
             <strong>{draft.name || 'Untitled object'}</strong>

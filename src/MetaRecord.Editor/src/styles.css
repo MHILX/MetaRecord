@@ -102,7 +102,54 @@ button:disabled {
 }
 
 .metadata-page-content {
+  display: grid;
+  gap: 12px;
   overflow: hidden;
+}
+
+.metadata-right-panel-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  justify-self: end;
+  padding: 4px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.metadata-right-panel-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #536176;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.metadata-right-panel-tab:hover {
+  color: #27415f;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.metadata-right-panel-tab.active {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.2);
+}
+
+.metadata-right-panel-body {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
 }
 
 .metadata-catalog-list {
@@ -966,6 +1013,7 @@ textarea {
 
 .metadata-actions {
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .metadata-object-list,

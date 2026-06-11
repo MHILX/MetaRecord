@@ -12,13 +12,11 @@ type PageNotice = {
   kind: 'info' | 'error';
 };
 
-const guidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
-
 export function MetadataViewerPage() {
   const [objects, setObjects] = useState<ObjectMetadata[]>([]);
   const [selectedMetadataObjectId, setSelectedMetadataObjectId] = useState<MetadataSelectionId>(null);
-  const [selectedObject, setSelectedObject] = useState<ObjectMetadata | null>(null);
   const [formValues, setFormValues] = useState<MetadataFormValues>({});
+  const [rightPanelTab, setRightPanelTab] = useState<'form' | 'edit'>('form');
   const [isLoadingObjects, setIsLoadingObjects] = useState(true);
   const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -28,17 +26,6 @@ export function MetadataViewerPage() {
   useEffect(() => {
     void loadObjects();
   }, []);
-
-  useEffect(() => {
-    if (selectedObject) {
-      setFormValues(createFormValues(selectedObject));
-      setSaveMessage(null);
-      setSaveError(null);
-      return;
-    }
-
-    setFormValues({});
-  }, [selectedObject]);
 
   useEffect(() => {
     if (!saveMessage)
@@ -56,27 +43,30 @@ export function MetadataViewerPage() {
     return () => window.clearTimeout(timeoutId);
   }, [metadataNotice]);
 
+  const selectedObject = selectedMetadataObjectId && selectedMetadataObjectId !== 'new'
+    ? objects.find(metadataObject => metadataObject.id === selectedMetadataObjectId) ?? null
+    : null;
+  const selectedPropertyCount = selectedObject?.properties.length ?? 0;
+  const formattedJson = JSON.stringify(formValues, null, 2);
+
   useEffect(() => {
-    if (selectedMetadataObjectId === null)
+    if (isLoadingObjects)
       return;
 
-    if (selectedMetadataObjectId === 'new') {
-      setSelectedObject(null);
+    if (!selectedObject || selectedMetadataObjectId === 'new')
+      setRightPanelTab('edit');
+  }, [isLoadingObjects, selectedMetadataObjectId, selectedObject]);
+
+  useEffect(() => {
+    if (selectedObject) {
+      setFormValues(createFormValues(selectedObject));
       setSaveMessage(null);
       setSaveError(null);
       return;
     }
 
-    const nextObject = objects.find(metadataObject => metadataObject.id === selectedMetadataObjectId) ?? null;
-    if (!nextObject || nextObject.id === selectedObject?.id)
-      return;
-
-    setSelectedObject(nextObject);
-    setSaveMessage(null);
-    setSaveError(null);
-  }, [objects, selectedMetadataObjectId, selectedObject?.id]);
-
-  const selectedPropertyCount = selectedObject?.properties.length ?? 0;
+    setFormValues({});
+  }, [selectedObject]);
 
   async function loadObjects() {
     setIsLoadingObjects(true);
@@ -85,9 +75,14 @@ export function MetadataViewerPage() {
       const nextObjects = await workflowApi.listObjects();
       setObjects(nextObjects);
 
-      if (selectedObject) {
-        const refreshedSelection = nextObjects.find(metadataObject => metadataObject.id === selectedObject.id) ?? null;
-        setSelectedObject(refreshedSelection);
+      if (selectedMetadataObjectId === null && nextObjects.length > 0) {
+        setSelectedMetadataObjectId(nextObjects[0].id);
+      } else if (
+        selectedMetadataObjectId !== null
+        && selectedMetadataObjectId !== 'new'
+        && !nextObjects.some(metadataObject => metadataObject.id === selectedMetadataObjectId)
+      ) {
+        setSelectedMetadataObjectId(nextObjects[0]?.id ?? null);
       }
     } catch (error) {
       showMetadataNotice(getErrorMessage(error, 'Could not load metadata objects.'), 'error');
@@ -158,12 +153,50 @@ export function MetadataViewerPage() {
             onMetadataObjectsChange={setObjects}
             onRefreshMetadata={loadObjects}
             onNotice={showMetadataNotice}
+            showDetails={false}
+            showObjectList={true}
+            showCreateButton={false}
           />
         </aside>
 
         <section className="panel metadata-page-content" aria-live="polite">
-          {selectedObject ? (
-            <form className="metadata-viewer-stack metadata-form-preview" onSubmit={handleFormSubmit}>
+          <div className="metadata-right-panel-tabs" role="tablist" aria-label="Metadata workspace views">
+            <button
+              className={`metadata-right-panel-tab ${rightPanelTab === 'form' ? 'active' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={rightPanelTab === 'form'}
+              onClick={() => setRightPanelTab('form')}
+            >
+              Form view
+            </button>
+            <button
+              className={`metadata-right-panel-tab ${rightPanelTab === 'edit' ? 'active' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={rightPanelTab === 'edit'}
+              onClick={() => setRightPanelTab('edit')}
+            >
+              Edit object
+            </button>
+          </div>
+
+          <div className="metadata-right-panel-body">
+            {rightPanelTab === 'edit' ? (
+              <MetadataManager
+                metadataObjects={objects}
+                isLoading={isLoadingObjects}
+                selectedObjectId={selectedMetadataObjectId}
+                onSelectedObjectIdChange={setSelectedMetadataObjectId}
+                onMetadataObjectsChange={setObjects}
+                onRefreshMetadata={loadObjects}
+                onNotice={showMetadataNotice}
+                showDetails={true}
+                showObjectList={false}
+                showCreateButton={true}
+              />
+            ) : selectedObject ? (
+              <form className="panel metadata-viewer-stack metadata-form-preview" onSubmit={handleFormSubmit}>
               <div className="metadata-viewer-summary-grid">
                 <div className="metadata-object-summary">
                   <span>Object id</span>
@@ -229,16 +262,17 @@ export function MetadataViewerPage() {
                   <span className="muted">Live form state</span>
                 </div>
 
-                <pre className="metadata-json">{JSON.stringify(formValues, null, 2)}</pre>
+                <pre className="metadata-json">{formattedJson}</pre>
               </section>
-            </form>
-          ) : (
-            <div className="empty-canvas metadata-page-empty">
-              <Database size={34} aria-hidden="true" />
-              <strong>No metadata object loaded</strong>
-              <span>Select an object from the list or load one by name or GUID.</span>
-            </div>
-          )}
+              </form>
+            ) : (
+              <div className="empty-canvas metadata-page-empty">
+                <Database size={34} aria-hidden="true" />
+                <strong>No metadata object loaded</strong>
+                <span>Select an object from the list to edit its definition and submit a record form.</span>
+              </div>
+            )}
+          </div>
         </section>
       </section>
     </main>
@@ -315,7 +349,7 @@ function MetadataPropertyField({
         step={inputType === 'number' && (property.clrType === 'Decimal' || property.clrType === 'Double') ? 'any' : undefined}
         min={inputType === 'number' && (property.clrType === 'Int32' || property.clrType === 'Int64') ? '0' : undefined}
         maxLength={property.maxLength ?? undefined}
-        onChange={event => onChange(property.name, inputType === 'datetime-local' ? event.target.value : event.target.value)}
+        onChange={event => onChange(property.name, event.target.value)}
         disabled={property.isPrimaryKey}
       />
 
