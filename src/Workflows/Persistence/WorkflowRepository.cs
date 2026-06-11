@@ -88,6 +88,26 @@ public sealed class WorkflowRepository
     public Task<bool> DisableAsync(Guid id, CancellationToken cancellationToken = default) =>
         SetEnabledAsync(id, false, cancellationToken);
 
+    public async Task<bool> DeleteDefinitionAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var workflow = await _context.WorkflowDefinitions
+            .FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken);
+
+        if (workflow is null)
+            return false;
+
+        var workflowRuns = await _context.WorkflowRuns
+            .Where(run => run.WorkflowId == id)
+            .ToListAsync(cancellationToken);
+
+        if (workflowRuns.Count > 0)
+            _context.WorkflowRuns.RemoveRange(workflowRuns);
+
+        _context.WorkflowDefinitions.Remove(workflow);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<bool> SetEnabledAsync(
         Guid id,
         bool isEnabled,

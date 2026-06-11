@@ -99,6 +99,56 @@ public sealed class WorkflowRepositoryTests
     }
 
     [Fact]
+    public async Task DeleteDefinitionAsync_removes_workflow_and_related_runs()
+    {
+        var dbPath = CreateTempDbPath();
+        try
+        {
+            await using var context = await CreateContextAsync(dbPath);
+            var repository = new WorkflowRepository(context);
+            var workflow = CreateFieldChangedWorkflow("Delete me", isEnabled: true);
+            await repository.SaveDefinitionAsync(workflow);
+
+            var run = new WorkflowRunEntity
+            {
+                WorkflowId = workflow.Id,
+                WorkflowVersion = workflow.Version,
+                ObjectName = workflow.ObjectName,
+                EventName = workflow.EventName,
+                RecordId = Guid.NewGuid().ToString(),
+                Status = WorkflowRunStatus.Succeeded.ToString(),
+                StartedAt = DateTime.UtcNow,
+                CompletedAt = DateTime.UtcNow.AddMilliseconds(10),
+                DurationMs = 10,
+                Steps = new List<WorkflowRunStepEntity>
+                {
+                    new()
+                    {
+                        NodeId = "trigger-1",
+                        NodeType = "trigger.field-changed",
+                        Status = WorkflowRunStatus.Succeeded.ToString(),
+                        StartedAt = DateTime.UtcNow,
+                        CompletedAt = DateTime.UtcNow.AddMilliseconds(4),
+                        DurationMs = 4
+                    }
+                }
+            };
+
+            await repository.SaveRunAsync(run);
+
+            var deleted = await repository.DeleteDefinitionAsync(workflow.Id);
+
+            Assert.True(deleted);
+            Assert.Null(await repository.GetDefinitionAsync(workflow.Id));
+            Assert.Null(await repository.GetRunAsync(run.Id));
+        }
+        finally
+        {
+            DeleteTempDb(dbPath);
+        }
+    }
+
+    [Fact]
     public async Task SaveRunAsync_persists_run_with_step_details()
     {
         var dbPath = CreateTempDbPath();

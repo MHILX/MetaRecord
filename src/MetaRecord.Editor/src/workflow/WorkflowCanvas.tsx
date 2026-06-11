@@ -13,6 +13,8 @@ import {
   type NodeChange,
   type NodeProps
 } from '@xyflow/react';
+import { Trash2 } from 'lucide-react';
+import type { MouseEvent } from 'react';
 import type { WorkflowDefinition, WorkflowNode, WorkflowNodeType, WorkflowValidationIssue } from '../api/types';
 import { getNodeIssues, getNodeType, updateNode, workflowHasEdge } from './workflowModel';
 
@@ -30,6 +32,7 @@ interface WorkflowNodeData extends Record<string, unknown> {
   workflowNode: WorkflowNode;
   nodeType?: WorkflowNodeType;
   issueCount: number;
+  onDeleteNode: (nodeId: string) => void;
 }
 
 const reactFlowNodeTypes = {
@@ -55,10 +58,36 @@ export function WorkflowCanvas({
       data: {
         workflowNode: node,
         nodeType,
-        issueCount: getNodeIssues(validationIssues, node.id).length
+        issueCount: getNodeIssues(validationIssues, node.id).length,
+        onDeleteNode: deleteNode
       }
     };
   });
+
+  function removeNodeFromWorkflow(currentWorkflow: WorkflowDefinition, nodeId: string): WorkflowDefinition | null {
+    const removedNode = currentWorkflow.nodes.find(node => node.id === nodeId);
+    const removedNodeType = removedNode ? getNodeType(nodeTypes, removedNode.type) : undefined;
+
+    if (removedNodeType?.isTrigger) {
+      onNotice('The trigger node cannot be removed from a workflow.');
+      return null;
+    }
+
+    return {
+      ...currentWorkflow,
+      nodes: currentWorkflow.nodes.filter(node => node.id !== nodeId),
+      edges: currentWorkflow.edges.filter(edge => edge.fromNodeId !== nodeId && edge.toNodeId !== nodeId)
+    };
+  }
+
+  function deleteNode(nodeId: string) {
+    const nextWorkflow = removeNodeFromWorkflow(workflow, nodeId);
+    if (!nextWorkflow)
+      return;
+
+    onWorkflowChange(nextWorkflow);
+    onSelectNode(null);
+  }
 
   const flowEdges: Edge[] = workflow.edges.map(edge => ({
     id: edge.id,
@@ -72,6 +101,7 @@ export function WorkflowCanvas({
 
   function handleNodesChange(changes: NodeChange[]) {
     let nextWorkflow = workflow;
+    let didRemoveNode = false;
 
     for (const change of changes) {
       if (change.type === 'position' && change.position) {
@@ -82,22 +112,18 @@ export function WorkflowCanvas({
       }
 
       if (change.type === 'remove') {
-        const removedNode = nextWorkflow.nodes.find(node => node.id === change.id);
-        const removedNodeType = removedNode ? getNodeType(nodeTypes, removedNode.type) : undefined;
-        if (removedNodeType?.isTrigger) {
-          onNotice('The trigger node cannot be removed from a workflow.');
+        const removedNodeWorkflow = removeNodeFromWorkflow(nextWorkflow, change.id);
+        if (!removedNodeWorkflow)
           continue;
-        }
 
-        nextWorkflow = {
-          ...nextWorkflow,
-          nodes: nextWorkflow.nodes.filter(node => node.id !== change.id),
-          edges: nextWorkflow.edges.filter(edge => edge.fromNodeId !== change.id && edge.toNodeId !== change.id)
-        };
+        nextWorkflow = removedNodeWorkflow;
+        didRemoveNode = true;
       }
     }
 
     onWorkflowChange(nextWorkflow);
+    if (didRemoveNode)
+      onSelectNode(null);
   }
 
   function handleEdgesChange(changes: EdgeChange[]) {
@@ -184,9 +210,26 @@ function WorkflowGraphNode(props: NodeProps) {
   const nodeType = data.nodeType;
   const inputPorts = nodeType?.inputPorts ?? [];
   const outputPorts = nodeType?.outputPorts ?? [];
+  const isTriggerNode = Boolean(nodeType?.isTrigger);
+
+  function handleDeleteNode(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    data.onDeleteNode(node.id);
+  }
 
   return (
     <div className={`graph-node graph-node-${nodeType?.category?.toLowerCase() ?? 'unknown'} ${data.issueCount > 0 ? 'graph-node-invalid' : ''}`}>
+      <button
+        className="graph-node-delete-button"
+        type="button"
+        onMouseDown={event => event.stopPropagation()}
+        onClick={handleDeleteNode}
+        disabled={isTriggerNode}
+        title={isTriggerNode ? 'Trigger nodes cannot be deleted' : 'Delete node'}
+        aria-label={isTriggerNode ? 'Trigger nodes cannot be deleted' : `Delete ${node.label || nodeType?.displayName || node.type}`}
+      >
+        <Trash2 size={12} aria-hidden="true" />
+      </button>
       {inputPorts.map((port, index) => (
         <Handle
           key={port.name}

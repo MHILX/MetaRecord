@@ -137,6 +137,22 @@ public sealed class WorkflowApiTests
         Assert.Single(history);
     }
 
+    [Fact]
+    public async Task Delete_workflow_removes_saved_workflow()
+    {
+        using var factory = new MetaRecordWebApiFactory();
+        var client = factory.CreateClient();
+        var workflow = CreateManualLogWorkflow();
+
+        var createResponse = await client.PostAsJsonAsync("/api/workflows", workflow);
+        createResponse.EnsureSuccessStatusCode();
+
+        var deleteResponse = await client.DeleteAsync($"/api/workflows/{workflow.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/workflows/{workflow.Id}")).StatusCode);
+    }
+
     private static WorkflowDefinition CreateManualLogWorkflow(
         string objectName = "Todo",
         bool isEnabled = true) => new()

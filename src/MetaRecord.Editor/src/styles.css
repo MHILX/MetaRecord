@@ -59,6 +59,199 @@ button:disabled {
   background: #f5f7fa;
 }
 
+.metadata-page {
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr);
+  height: 100vh;
+  min-height: 0;
+  min-width: 960px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #f7f9fc 0%, #edf3f9 100%);
+}
+
+.metadata-page-header {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.metadata-page-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 330px) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px;
+}
+
+.metadata-page-sidebar,
+.metadata-page-content {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.metadata-page-content {
+  overflow: auto;
+}
+
+.metadata-load-form {
+  display: grid;
+  gap: 10px;
+}
+
+.metadata-load-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metadata-catalog-list {
+  display: grid;
+  gap: 7px;
+}
+
+.metadata-viewer-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.metadata-viewer-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metadata-viewer-section {
+  display: grid;
+  gap: 8px;
+}
+
+.metadata-form-preview {
+  gap: 14px;
+}
+
+.metadata-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.metadata-form-field {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.metadata-form-field-boolean {
+  align-content: start;
+}
+
+.metadata-form-field-label-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metadata-form-field-label-row strong {
+  font-size: 13px;
+}
+
+.metadata-form-field-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.metadata-form-field .status-pill {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.metadata-form-field input {
+  width: 100%;
+}
+
+.metadata-form-checkbox {
+  min-height: 34px;
+  padding: 8px 0 2px;
+}
+
+.metadata-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metadata-property-table-wrapper {
+  overflow: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.metadata-property-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+}
+
+.metadata-property-table th,
+.metadata-property-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.metadata-property-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: #536176;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.metadata-property-table tbody tr:hover td {
+  background: #f8fbff;
+}
+
+.metadata-json {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #1f2a3a;
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 380px;
+  overflow: auto;
+}
+
+.metadata-page-empty {
+  min-height: 100%;
+}
+
 .editor-toolbar {
   grid-row: 1;
   display: grid;
@@ -105,7 +298,8 @@ button:disabled {
   min-width: 0;
 }
 
-.workflow-toolbar-fields input {
+.workflow-toolbar-fields input,
+.workflow-toolbar-fields select {
   width: min(440px, 42vw);
   min-width: 180px;
   height: 36px;
@@ -165,6 +359,16 @@ button:disabled {
 
 .secondary-button {
   padding: 0 10px;
+}
+
+.destructive-button {
+  border-color: rgba(188, 41, 66, 0.35);
+  color: var(--danger);
+}
+
+.destructive-button:hover {
+  border-color: var(--danger);
+  background: #fff4f6;
 }
 
 .secondary-button:hover,
@@ -494,6 +698,39 @@ textarea {
   border: 1px solid #aeb9c8;
   background: #ffffff;
   box-shadow: 0 6px 18px rgba(28, 43, 66, 0.09);
+}
+
+.graph-node-delete-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #8693a6;
+  opacity: 0.62;
+  z-index: 2;
+}
+
+.graph-node:hover .graph-node-delete-button,
+.graph-node-delete-button:focus-visible {
+  opacity: 1;
+}
+
+.graph-node-delete-button:hover:not(:disabled) {
+  border-color: rgba(188, 41, 66, 0.38);
+  background: #fff3f6;
+  color: var(--danger);
+}
+
+.graph-node-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.28;
 }
 
 .graph-node-trigger {
@@ -984,12 +1221,37 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .metadata-page {
+    min-width: 0;
+    min-height: 100vh;
+    height: auto;
+    grid-template-rows: auto auto;
+  }
+
+  .metadata-page-header,
+  .metadata-page-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .metadata-viewer-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metadata-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metadata-property-table {
+    min-width: 720px;
+  }
+
   .workflow-toolbar-fields,
   .toolbar-actions {
     flex-wrap: wrap;
   }
 
-  .workflow-toolbar-fields input {
+  .workflow-toolbar-fields input,
+  .workflow-toolbar-fields select {
     width: 100%;
   }
 

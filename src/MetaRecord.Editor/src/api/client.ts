@@ -96,6 +96,9 @@ export const workflowApi = {
     method: 'POST',
     body: JSON.stringify({})
   }),
+  deleteWorkflow: (id: string) => request<void>(`/api/workflows/${id}`, {
+    method: 'DELETE'
+  }),
   testRun: (id: string, testRun: WorkflowTestRunRequest) => request<WorkflowTestRunResponse>(`/api/workflows/${id}/test-run`, {
     method: 'POST',
     body: JSON.stringify(testRun)

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, CheckCircle2, Maximize2, Power, PowerOff, Save, Workflow as WorkflowIcon, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, Database, Maximize2, Power, PowerOff, Save, Trash2, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, workflowApi } from '../api/client';
 import type {
@@ -33,6 +33,10 @@ type LeftRailTab = 'workflows' | 'metadata' | 'palette';
 
 type BottomRailTab = 'validation' | 'test' | 'history';
 
+interface WorkflowEditorProps {
+  onOpenMetadataViewer?: () => void;
+}
+
 const leftRailTabs: Array<{ id: LeftRailTab; label: string }> = [
   { id: 'workflows', label: 'Workflows' },
   { id: 'metadata', label: 'Metadata' },
@@ -53,7 +57,7 @@ function getBottomRailTabLabel(tab: BottomRailTab): string {
   return bottomRailTabs.find(candidate => candidate.id === tab)?.label ?? 'Panel';
 }
 
-export function WorkflowEditor() {
+export function WorkflowEditor({ onOpenMetadataViewer }: WorkflowEditorProps = {}) {
   const preferredDemoWorkflowName = demoDomain.preferredWorkflowName;
   const [metadataObjects, setMetadataObjects] = useState<ObjectMetadata[]>([]);
   const [selectedMetadataObjectId, setSelectedMetadataObjectId] = useState<MetadataSelectionId>(null);
@@ -81,6 +85,22 @@ export function WorkflowEditor() {
     () => Boolean(selectedWorkflow && savedWorkflowIds.has(selectedWorkflow.id)),
     [savedWorkflowIds, selectedWorkflow]
   );
+
+  const selectedWorkflowObjectName = useMemo(() => {
+    if (!selectedWorkflow)
+      return '';
+
+    return getObject(metadataObjects, selectedWorkflow.objectName)?.name ?? selectedWorkflow.objectName;
+  }, [metadataObjects, selectedWorkflow?.objectName]);
+
+  const workflowObjectNames = useMemo(() => {
+    const objectNames = metadataObjects.map(metadataObject => metadataObject.name);
+
+    if (selectedWorkflowObjectName && !objectNames.includes(selectedWorkflowObjectName))
+      return [selectedWorkflowObjectName, ...objectNames];
+
+    return objectNames;
+  }, [metadataObjects, selectedWorkflowObjectName]);
 
   useEffect(() => {
     void loadInitialData();
@@ -176,6 +196,16 @@ export function WorkflowEditor() {
     void loadRuns(workflow.id);
   }
 
+  function clearSelectedWorkflow() {
+    setSelectedWorkflow(null);
+    setSelectedNodeId(null);
+    setValidationIssues([]);
+    setRuns([]);
+    setSelectedRun(null);
+    setTestResult(null);
+    setTestInputValues({});
+  }
+
   function createWorkflow(name: string, objectName: string, eventName: WorkflowDefinition['eventName']) {
     try {
       const workflow = createWorkflowDraft(name, objectName, eventName, metadataObjects, nodeTypes);
@@ -267,6 +297,39 @@ export function WorkflowEditor() {
     }
   }
 
+  async function deleteSelectedWorkflow() {
+    if (!selectedWorkflow)
+      return;
+
+    const confirmMessage = selectedWorkflowIsSaved
+      ? `Delete workflow "${selectedWorkflow.name}"? This will also remove its run history.`
+      : `Discard unsaved workflow "${selectedWorkflow.name}"?`;
+
+    if (!window.confirm(confirmMessage))
+      return;
+
+    if (!selectedWorkflowIsSaved) {
+      clearSelectedWorkflow();
+      showNotice('Workflow discarded.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await workflowApi.deleteWorkflow(selectedWorkflow.id);
+
+      const remainingWorkflows = await workflowApi.listWorkflows();
+      setWorkflows(remainingWorkflows);
+      setSavedWorkflowIds(new Set(remainingWorkflows.map(workflow => workflow.id)));
+      clearSelectedWorkflow();
+      showNotice('Workflow deleted.');
+    } catch (error) {
+      showNotice(getErrorMessage(error, 'Delete failed.'), 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function disableSelectedWorkflow() {
     if (!selectedWorkflow || !selectedWorkflowIsSaved)
       return;
@@ -334,7 +397,23 @@ export function WorkflowEditor() {
               onChange={event => setSelectedWorkflow({ ...selectedWorkflow, name: event.target.value })}
               aria-label="Workflow name"
             />
-            <span>{selectedWorkflow.objectName}</span>
+            <select
+              value={selectedWorkflowObjectName}
+              onChange={event => {
+                setSelectedWorkflow({ ...selectedWorkflow, objectName: event.target.value });
+                setValidationIssues([]);
+                setSelectedRun(null);
+                setTestResult(null);
+              }}
+              aria-label="Workflow object"
+              disabled={metadataObjects.length === 0}
+            >
+              {workflowObjectNames.map(objectName => (
+                <option key={objectName} value={objectName}>
+                  {objectName}
+                </option>
+              ))}
+            </select>
             <span>{selectedWorkflow.eventName}</span>
             <span className={selectedWorkflow.isEnabled ? 'status-pill enabled' : 'status-pill disabled'}>
               {selectedWorkflow.isEnabled ? 'Enabled' : selectedWorkflowIsSaved ? 'Disabled' : 'Draft'}
@@ -343,6 +422,10 @@ export function WorkflowEditor() {
         )}
 
         <div className="toolbar-actions">
+          <button className="secondary-button" type="button" onClick={onOpenMetadataViewer}>
+            <Database size={16} aria-hidden="true" />
+            Metadata Viewer
+          </button>
           <button
             className="secondary-button"
             type="button"
@@ -368,6 +451,10 @@ export function WorkflowEditor() {
           <button className="secondary-button" type="button" onClick={disableSelectedWorkflow} disabled={!selectedWorkflow || !selectedWorkflowIsSaved || isSaving}>
             <PowerOff size={16} aria-hidden="true" />
             Disable
+          </button>
+          <button className="secondary-button destructive-button" type="button" onClick={deleteSelectedWorkflow} disabled={!selectedWorkflow || isSaving}>
+            <Trash2 size={16} aria-hidden="true" />
+            Delete
           </button>
         </div>
       </header>

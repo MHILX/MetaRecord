@@ -99,6 +99,15 @@ public static class WorkflowEndpoints
             return Results.Ok(disabledWorkflow);
         });
 
+        group.MapDelete("/{id:guid}", async (
+            Guid id,
+            WorkflowRepository repository,
+            CancellationToken cancellationToken) =>
+        {
+            var deleted = await repository.DeleteDefinitionAsync(id, cancellationToken);
+            return deleted ? Results.NoContent() : Results.NotFound();
+        });
+
         group.MapPost("/{id:guid}/test-run", async (
             Guid id,
             HttpRequest request,
