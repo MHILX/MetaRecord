@@ -302,9 +302,8 @@ public class EntityStore
         foreach (var prop in metadata.Properties)
         {
             var propertyInfo = typeof(T).GetProperty(prop.Name);
-            if (propertyInfo != null)
+            if (propertyInfo != null && TryGetOrdinal(reader, prop.ColumnName, out var ordinal))
             {
-                var ordinal = reader.GetOrdinal(prop.ColumnName);
                 if (!reader.IsDBNull(ordinal))
                 {
                     var value = reader.GetValue(ordinal);
@@ -329,7 +328,12 @@ public class EntityStore
 
         foreach (var prop in metadata.Properties)
         {
-            var ordinal = reader.GetOrdinal(prop.ColumnName);
+            if (!TryGetOrdinal(reader, prop.ColumnName, out var ordinal))
+            {
+                values[prop.Name] = null;
+                continue;
+            }
+
             values[prop.Name] = reader.IsDBNull(ordinal)
                 ? null
                 : ConvertValue(reader.GetValue(ordinal), prop.ClrType);
@@ -430,6 +434,11 @@ public class EntityStore
             return true;
         }
         catch (IndexOutOfRangeException)
+        {
+            ordinal = -1;
+            return false;
+        }
+        catch (ArgumentOutOfRangeException)
         {
             ordinal = -1;
             return false;

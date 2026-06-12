@@ -139,6 +139,34 @@ public sealed class EntityStoreDynamicValueTests : IDisposable
     }
 
     [Fact]
+    public void AllValues_skips_missing_columns_in_a_drifted_table()
+    {
+        var store = new EntityStore(_dbPath);
+        var metadata = CreateDriftedTodoMetadata();
+
+        using (var connection = new SqliteConnection($"Data Source={_dbPath}"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE Todos (
+                    Id TEXT PRIMARY KEY,
+                    Title TEXT NOT NULL
+                );
+
+                INSERT INTO Todos (Id, Title) VALUES ('11111111-1111-1111-1111-111111111111', 'Todo item');
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        var values = store.AllValues(metadata);
+
+        Assert.Single(values);
+        Assert.Equal("Todo item", values[0]["Title"]);
+        Assert.Null(values[0]["Description"]);
+    }
+
+    [Fact]
     public void Generic_insert_update_and_find_still_work()
     {
         var store = new EntityStore(_dbPath);
@@ -185,6 +213,18 @@ public sealed class EntityStoreDynamicValueTests : IDisposable
             new PropertyMetadata("Priority", "Priority", typeof(int), false),
             new PropertyMetadata("IsActive", "IsActive", typeof(bool), false),
             new PropertyMetadata("CreatedAt", "CreatedAt", typeof(DateTime), false)
+        }
+    };
+
+    private static ObjectMetadata CreateDriftedTodoMetadata() => new()
+    {
+        Name = "Todo",
+        TableName = "Todos",
+        Properties = new[]
+        {
+            new PropertyMetadata("Id", "Id", typeof(Guid), true) { IsPrimaryKey = true },
+            new PropertyMetadata("Title", "Title", typeof(string), true),
+            new PropertyMetadata("Description", "Description", typeof(string), false)
         }
     };
 

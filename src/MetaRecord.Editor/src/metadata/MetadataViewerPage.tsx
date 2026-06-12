@@ -1,4 +1,4 @@
-import { Database, Save } from 'lucide-react';
+import { Database, FilePlus2, Save } from 'lucide-react';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { ApiError, workflowApi } from '../api/client';
 import type { MetadataRecordValues, ObjectMetadata, PropertyMetadata } from '../api/types';
@@ -158,6 +158,11 @@ export function MetadataViewerPage() {
     setMetadataNotice({ message, kind });
   }
 
+  function openNewMetadataObject() {
+    setSelectedMetadataObjectId('new');
+    setRightPanelTab('edit');
+  }
+
   async function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -207,30 +212,37 @@ export function MetadataViewerPage() {
             onNotice={showMetadataNotice}
             showDetails={false}
             showObjectList={true}
-            showCreateButton={false}
+            showCreateButton={true}
           />
         </aside>
 
         <section className="panel metadata-page-content" aria-live="polite">
-          <div className="metadata-right-panel-tabs" role="tablist" aria-label="Metadata workspace views">
-            <button
-              className={`metadata-right-panel-tab ${rightPanelTab === 'form' ? 'active' : ''}`}
-              type="button"
-              role="tab"
-              aria-selected={rightPanelTab === 'form'}
-              onClick={() => setRightPanelTab('form')}
-            >
-              Form view
+          <div className="metadata-right-panel-header">
+            <button className="secondary-button" type="button" onClick={openNewMetadataObject}>
+              <FilePlus2 size={16} aria-hidden="true" />
+              New object
             </button>
-            <button
-              className={`metadata-right-panel-tab ${rightPanelTab === 'edit' ? 'active' : ''}`}
-              type="button"
-              role="tab"
-              aria-selected={rightPanelTab === 'edit'}
-              onClick={() => setRightPanelTab('edit')}
-            >
-              Edit object
-            </button>
+
+            <div className="metadata-right-panel-tabs" role="tablist" aria-label="Metadata workspace views">
+              <button
+                className={`metadata-right-panel-tab ${rightPanelTab === 'form' ? 'active' : ''}`}
+                type="button"
+                role="tab"
+                aria-selected={rightPanelTab === 'form'}
+                onClick={() => setRightPanelTab('form')}
+              >
+                Form view
+              </button>
+              <button
+                className={`metadata-right-panel-tab ${rightPanelTab === 'edit' ? 'active' : ''}`}
+                type="button"
+                role="tab"
+                aria-selected={rightPanelTab === 'edit'}
+                onClick={() => setRightPanelTab('edit')}
+              >
+                Edit object
+              </button>
+            </div>
           </div>
 
           <div className="metadata-right-panel-body">
@@ -245,7 +257,7 @@ export function MetadataViewerPage() {
                 onNotice={showMetadataNotice}
                 showDetails={true}
                 showObjectList={false}
-                showCreateButton={true}
+                showCreateButton={false}
               />
             ) : selectedObject ? (
               <form className="panel metadata-viewer-stack metadata-form-preview" onSubmit={handleFormSubmit}>

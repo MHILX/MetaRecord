@@ -345,7 +345,7 @@ export function MetadataManager({
             <div className="metadata-property-list">
               {draft.properties.map((property, index) => (
                 <MetadataPropertyCard
-                  key={`${property.name}-${index}`}
+                  key={index}
                   property={property}
                   index={index}
                   onChange={updater => updateProperty(index, updater)}
