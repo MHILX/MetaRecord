@@ -7,7 +7,7 @@ In a metadata-driven object model, an entity's "shape" lives in three places at 
 ```
    ┌────────────────────────┐     ┌────────────────────────┐     ┌────────────────────────┐
    │ 1. Metadata rows       │     │ 2. Entity table        │     │ 3. CLR class           │
-   │ ObjectDefinitions      │     │    e.g. Products       │     │    e.g. Product.cs     │
+       │ ObjectDefinitions      │     │    e.g. Todos          │     │    e.g. Todo.cs        │
    │ PropertyDefinitions    │     │                        │     │                        │
    │ Name, ColumnName, Type │     │ Column, SQL type, NULL │     │ Properties + types     │
    └────────────────────────┘     └────────────────────────┘     └────────────────────────┘
@@ -35,10 +35,10 @@ These are coupled only by **convention** (matching names) and a **one-time boots
 
 ### 1. Metadata and CLR class edited → entity table is now stale
 
-Adding a `PropertyDefinitions` row for `Sku TEXT NOT NULL` and adding `Product.Sku` doesn't change an existing `Products` table because [`EntityStore.EnsureTableExists`](../Data/EntityStore.cs) emits `CREATE TABLE IF NOT EXISTS` and never `ALTER`s. If metadata changes without the CLR property, reflection silently omits it instead (scenario 2).
+Adding a `PropertyDefinitions` row for `Sku TEXT NOT NULL` and adding `Todo.Sku` doesn't change an existing `Todos` table because [`EntityStore.EnsureTableExists`](../Data/EntityStore.cs) emits `CREATE TABLE IF NOT EXISTS` and never `ALTER`s. If metadata changes without the CLR property, reflection silently omits it instead (scenario 2).
 
 ```text
-INSERT INTO Products (Id, Name, Price, Quantity, Sku) VALUES (...)
+INSERT INTO Todos (Id, Title, Price, Quantity, Sku) VALUES (...)
        ↑
        SqliteException: no such column: Sku
 ```
@@ -47,17 +47,17 @@ Once the CLR property exists, inserts crash because generated SQL references a c
 
 ### 2. Metadata edited → CLR class is now stale
 
-A `Description` property is added to metadata but not to `Product.cs`.
+A `Description` property is added to metadata but not to `Todo.cs`.
 
 ```csharp
-typeof(Product).GetProperty("Description"); // null
+typeof(Todo).GetProperty("Description"); // null
 ```
 
 `EntityStore` silently drops the column on save and on read. No exception, no warning. If the DB column exists because the table was freshly created or manually migrated, it accumulates `NULL`s while the application acts as if `Description` doesn't exist.
 
 ### 3. CLR class edited → metadata is now stale
 
-Renaming `Product.Quantity` to `Product.StockOnHand` in code without updating the metadata row leaves `GetProperty("Quantity") == null`. Saves quietly omit the value; reads quietly leave `StockOnHand = 0`. Compiles fine, runs fine, **loses data**.
+Renaming `Todo.Quantity` to `Todo.StockOnHand` in code without updating the metadata row leaves `GetProperty("Quantity") == null`. Saves quietly omit the value; reads quietly leave `StockOnHand = 0`. Compiles fine, runs fine, **loses data**.
 
 ### 4. CLR type vs. metadata `DataType` mismatch
 
@@ -65,7 +65,7 @@ Metadata says `Decimal`; the CLR property is `double`. On read, `EntityStore.Con
 
 ### 5. Entity table altered out-of-band → metadata is now stale
 
-A DBA hand-edits `Products` to add `CHECK (Price > 0)`. Metadata doesn't know. The next `EnsureTableExists` is a no-op (table exists), and inserts that violate the check fail at runtime with no helpful diagnostic from the metadata layer.
+A DBA hand-edits `Todos` to add `CHECK (Price > 0)`. Metadata doesn't know. The next `EnsureTableExists` is a no-op (table exists), and inserts that violate the check fail at runtime with no helpful diagnostic from the metadata layer.
 
 ### 6. Type-name string typos
 
@@ -88,7 +88,7 @@ Two processes hold their `MetadataRegistry` cache. One edits the metadata tables
 
 ### 9. Metadata removed or renamed → table keeps orphaned data
 
-Removing `Quantity` from metadata, or renaming it to `StockOnHand`, does not remove or rename the `Quantity` column in `Products`. The old column can keep accumulating historical data that no runtime path reads, while new metadata points elsewhere. Dropping or renaming columns needs an explicit migration, not a bootstrap check.
+Removing `Quantity` from metadata, or renaming it to `StockOnHand`, does not remove or rename the `Quantity` column in `Todos`. The old column can keep accumulating historical data that no runtime path reads, while new metadata points elsewhere. Dropping or renaming columns needs an explicit migration, not a bootstrap check.
 
 ### 10. Required / optional semantics drift
 

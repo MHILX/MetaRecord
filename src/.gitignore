@@ -1,8 +1,6 @@
 # Build output
 bin/
 obj/
-**/bin/
-**/obj/
 
 # Runtime SQLite database
 *.db
@@ -20,10 +18,3 @@ obj/
 # OS
 Thumbs.db
 .DS_Store
-
-# Node / frontend
-node_modules/
-**/node_modules/
-dist/
-**/dist/
-*.tsbuildinfo
