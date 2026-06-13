@@ -230,7 +230,15 @@ It starts the API in one PowerShell window and the visual editor in another, the
 
 On startup, the web host seeds the demo metadata plus four demo workflows, so the editor opens with a complete sample workflow set instead of an empty canvas. The default editor selection is the richer "Capture todo snapshot" workflow.
 
+If you are new to the editor, start with the step-by-step [Workflow Editor User Guide](docs/Workflow-Editor-User-Guide.md).
+
 For a guided first-time tour of that workflow and every editor panel, see [Capture Todo Audit Snapshot Workflow](docs/Capture-Todo-Audit-Snapshot-Workflow.md).
+
+Doc map:
+
+- [Workflow Editor User Guide](docs/Workflow-Editor-User-Guide.md) - start here if you have not used the editor yet.
+- [Capture Todo Audit Snapshot Workflow](docs/Capture-Todo-Audit-Snapshot-Workflow.md) - read next for one complete walkthrough.
+- [Low-Code Workflow Editor MVP Plan](docs/Low-Code-Workflow-Editor-MVP.md) - read if you want the broader product and design context.
 
 Start the API in one terminal:
 
