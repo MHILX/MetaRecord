@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MetaRecord.Models;
 using MetaRecord.Web;
 using MetaRecord.Web.Contracts;
+using MetaRecord.Workflows;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -69,6 +71,181 @@ public sealed class MetadataApiTests
         var afterDelete = await client.GetFromJsonAsync<ObjectMetadataResponse[]>("/api/metadata/objects", JsonOptions);
         Assert.NotNull(afterDelete);
         Assert.DoesNotContain(afterDelete, metadata => metadata.Name == "NotebookEntry");
+    }
+
+    [Fact]
+    public async Task Metadata_relationships_round_trip_through_the_api()
+    {
+        using var factory = new MetaRecordWebApiFactory();
+        var client = factory.CreateClient();
+        var request = new ObjectMetadataUpsertRequest(
+            Guid.NewGuid(),
+            "Notebook",
+            "Notebooks",
+            new[]
+            {
+                new PropertyMetadataUpsertRequest("Id", "Id", "Guid", true, null, false, true, null, null),
+                new PropertyMetadataUpsertRequest("Title", "Title", "String", true, 200, false, false, null, null),
+                new PropertyMetadataUpsertRequest("TodoId", "TodoId", "Guid", false, null, false, false, null, null)
+            },
+            new[]
+            {
+                new RelationshipMetadataUpsertRequest(
+                    "Todo",
+                    "TodoId",
+                    Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                    DemoDomain.ObjectName,
+                    "Id",
+                    RelationshipCardinality.ManyToOne,
+                    RelationshipDeleteBehavior.Restrict,
+                    "Title",
+                    "Related todo",
+                    "Lookup to the owning todo")
+            });
+
+        var validateResponse = await client.PostAsJsonAsync("/api/metadata/objects/validate", request);
+        var validation = await validateResponse.Content.ReadFromJsonAsync<MetadataValidationResponse>(JsonOptions);
+
+        validateResponse.EnsureSuccessStatusCode();
+        Assert.NotNull(validation);
+        Assert.True(validation.IsValid);
+
+        var createResponse = await client.PostAsJsonAsync("/api/metadata/objects", request);
+        var created = await createResponse.Content.ReadFromJsonAsync<ObjectMetadataResponse>(JsonOptions);
+
+        createResponse.EnsureSuccessStatusCode();
+        Assert.NotNull(created);
+        Assert.Single(created.Relationships);
+
+        var relationship = created.Relationships[0];
+        Assert.Equal("Todo", relationship.Name);
+        Assert.Equal("TodoId", relationship.SourcePropertyName);
+        Assert.Equal(DemoDomain.ObjectName, relationship.TargetObjectName);
+        Assert.Equal("Id", relationship.TargetPropertyName);
+        Assert.Equal(RelationshipCardinality.ManyToOne, relationship.Cardinality);
+
+        var loaded = await client.GetFromJsonAsync<ObjectMetadataResponse>($"/api/metadata/objects/{created.Id}", JsonOptions);
+        Assert.NotNull(loaded);
+        Assert.Single(loaded.Relationships);
+        Assert.Equal("TodoId", loaded.Relationships[0].SourcePropertyName);
+    }
+
+    [Fact]
+    public async Task Metadata_record_save_rejects_missing_relationship_targets()
+    {
+        using var factory = new MetaRecordWebApiFactory();
+        var client = factory.CreateClient();
+        var todoObjectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var targetTodoRecordId = Guid.NewGuid();
+        var notebookId = Guid.NewGuid();
+        var request = CreateNotebookWithRelationshipRequest(notebookId, todoObjectId);
+
+        var validateResponse = await client.PostAsJsonAsync("/api/metadata/objects/validate", request);
+        var validation = await validateResponse.Content.ReadFromJsonAsync<MetadataValidationResponse>(JsonOptions);
+
+        validateResponse.EnsureSuccessStatusCode();
+        Assert.NotNull(validation);
+        Assert.True(validation.IsValid);
+
+        var createMetadataResponse = await client.PostAsJsonAsync("/api/metadata/objects", request);
+        createMetadataResponse.EnsureSuccessStatusCode();
+
+        var missingTargetResponse = await client.PostAsJsonAsync(
+            "/api/metadata/objects/11111111-1111-1111-1111-111111111111/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(targetTodoRecordId, JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Target todo", JsonOptions)
+            }));
+
+        missingTargetResponse.EnsureSuccessStatusCode();
+
+        var createNotebookRecordResponse = await client.PostAsJsonAsync(
+            $"/api/metadata/objects/{notebookId}/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(Guid.NewGuid(), JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Notebook A", JsonOptions),
+                ["TodoId"] = JsonSerializer.SerializeToElement(targetTodoRecordId, JsonOptions)
+            }));
+
+        var createdNotebookRecord = await createNotebookRecordResponse.Content.ReadFromJsonAsync<MetadataRecordSaveResponse>(JsonOptions);
+
+        createNotebookRecordResponse.EnsureSuccessStatusCode();
+        Assert.NotNull(createdNotebookRecord);
+
+        var invalidNotebookRecordResponse = await client.PostAsJsonAsync(
+            $"/api/metadata/objects/{notebookId}/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(Guid.NewGuid(), JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Notebook B", JsonOptions),
+                ["TodoId"] = JsonSerializer.SerializeToElement(Guid.NewGuid(), JsonOptions)
+            }));
+
+        var invalidNotebookRecord = await invalidNotebookRecordResponse.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidNotebookRecordResponse.StatusCode);
+        Assert.Contains("missing 'Todo' record", invalidNotebookRecord, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Metadata_existing_guid_field_can_be_promoted_to_relationship_without_rewriting_records()
+    {
+        using var factory = new MetaRecordWebApiFactory();
+        var client = factory.CreateClient();
+        var todoObjectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var targetTodoRecordId = Guid.NewGuid();
+        var notebookId = Guid.NewGuid();
+        var baseRequest = CreateNotebookRequest(notebookId, includeTodoLookupField: true);
+
+        var createMetadataResponse = await client.PostAsJsonAsync("/api/metadata/objects", baseRequest);
+        createMetadataResponse.EnsureSuccessStatusCode();
+
+        var createTodoResponse = await client.PostAsJsonAsync(
+            "/api/metadata/objects/11111111-1111-1111-1111-111111111111/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(targetTodoRecordId, JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Promoted target", JsonOptions)
+            }));
+
+        createTodoResponse.EnsureSuccessStatusCode();
+
+        var saveNotebookRecordResponse = await client.PostAsJsonAsync(
+            $"/api/metadata/objects/{notebookId}/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(Guid.NewGuid(), JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Notebook before promotion", JsonOptions),
+                ["TodoId"] = JsonSerializer.SerializeToElement(targetTodoRecordId, JsonOptions)
+            }));
+
+        saveNotebookRecordResponse.EnsureSuccessStatusCode();
+
+        var promotedRequest = CreateNotebookWithRelationshipRequest(notebookId, todoObjectId);
+        var updateMetadataResponse = await client.PutAsJsonAsync($"/api/metadata/objects/{notebookId}", promotedRequest);
+        var updateValidation = await updateMetadataResponse.Content.ReadFromJsonAsync<ObjectMetadataResponse>(JsonOptions);
+
+        updateMetadataResponse.EnsureSuccessStatusCode();
+        Assert.NotNull(updateValidation);
+        Assert.Single(updateValidation.Relationships);
+
+        var loadedRecords = await client.GetFromJsonAsync<Dictionary<string, JsonElement>[]>($"/api/metadata/objects/{notebookId}/records", JsonOptions);
+        Assert.NotNull(loadedRecords);
+        Assert.Single(loadedRecords);
+        Assert.Equal(targetTodoRecordId.ToString(), loadedRecords[0]["TodoId"].GetString());
+
+        var rewriteResponse = await client.PostAsJsonAsync(
+            $"/api/metadata/objects/{notebookId}/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(loadedRecords[0]["Id"].GetGuid(), JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Notebook after promotion", JsonOptions),
+                ["TodoId"] = JsonSerializer.SerializeToElement(targetTodoRecordId, JsonOptions)
+            }));
+
+        rewriteResponse.EnsureSuccessStatusCode();
     }
 
     [Fact]
@@ -247,14 +424,47 @@ public sealed class MetadataApiTests
         Assert.Equal("Notebook B", savedTitle);
     }
 
-    private static ObjectMetadataUpsertRequest CreateNotebookRequest(Guid id) => new(
+    private static ObjectMetadataUpsertRequest CreateNotebookRequest(Guid id, bool includeTodoLookupField = false) => new(
+        id,
+        "Notebook",
+        "Notebooks",
+        includeTodoLookupField
+            ? new[]
+            {
+                new PropertyMetadataUpsertRequest("Id", "Id", "Guid", true, null, false, true, null, null),
+                new PropertyMetadataUpsertRequest("Title", "Title", "String", true, 200, false, false, null, "Notebook title"),
+                new PropertyMetadataUpsertRequest("TodoId", "TodoId", "Guid", false, null, false, false, null, "Related todo id")
+            }
+            : new[]
+            {
+                new PropertyMetadataUpsertRequest("Id", "Id", "Guid", true, null, false, true, null, null),
+                new PropertyMetadataUpsertRequest("Title", "Title", "String", true, 200, false, false, null, "Notebook title")
+            },
+        Array.Empty<RelationshipMetadataUpsertRequest>());
+
+    private static ObjectMetadataUpsertRequest CreateNotebookWithRelationshipRequest(Guid id, Guid targetObjectId) => new(
         id,
         "Notebook",
         "Notebooks",
         new[]
         {
             new PropertyMetadataUpsertRequest("Id", "Id", "Guid", true, null, false, true, null, null),
-            new PropertyMetadataUpsertRequest("Title", "Title", "String", true, 200, false, false, null, "Notebook title")
+            new PropertyMetadataUpsertRequest("Title", "Title", "String", true, 200, false, false, null, "Notebook title"),
+            new PropertyMetadataUpsertRequest("TodoId", "TodoId", "Guid", false, null, false, false, null, null)
+        },
+        new[]
+        {
+            new RelationshipMetadataUpsertRequest(
+                "Todo",
+                "TodoId",
+                targetObjectId,
+                DemoDomain.ObjectName,
+                "Id",
+                RelationshipCardinality.ManyToOne,
+                RelationshipDeleteBehavior.Restrict,
+                "Title",
+                "Related todo",
+                "Lookup to the owning todo")
         });
 
     private sealed class MetaRecordWebApiFactory : WebApplicationFactory<WebApiMarker>

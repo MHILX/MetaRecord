@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MetaRecord.Models;
 using MetaRecord.Workflows.Definitions;
 using MetaRecord.Workflows.Runtime;
 using MetaRecord.Workflows.Validation;
@@ -9,7 +10,8 @@ public sealed record ObjectMetadataUpsertRequest(
     Guid? Id,
     string Name,
     string TableName,
-    IReadOnlyList<PropertyMetadataUpsertRequest> Properties);
+    IReadOnlyList<PropertyMetadataUpsertRequest> Properties,
+    IReadOnlyList<RelationshipMetadataUpsertRequest>? Relationships = null);
 
 public sealed record PropertyMetadataUpsertRequest(
     string Name,
@@ -42,7 +44,8 @@ public sealed record ObjectMetadataResponse(
     Guid Id,
     string Name,
     string TableName,
-    IReadOnlyList<PropertyMetadataResponse> Properties);
+    IReadOnlyList<PropertyMetadataResponse> Properties,
+    IReadOnlyList<RelationshipMetadataResponse> Relationships);
 
 public sealed record MetadataRecordSaveRequest(
     Dictionary<string, JsonElement>? Values);
@@ -61,6 +64,30 @@ public sealed record PropertyMetadataResponse(
     bool IsPrimaryKey,
     string? DefaultValue,
     string? Caption);
+
+public sealed record RelationshipMetadataUpsertRequest(
+    string Name,
+    string SourcePropertyName,
+    Guid TargetObjectId,
+    string? TargetObjectName,
+    string? TargetPropertyName,
+    RelationshipCardinality Cardinality,
+    RelationshipDeleteBehavior DeleteBehavior,
+    string? DisplayPropertyName,
+    string? Caption,
+    string? Description);
+
+public sealed record RelationshipMetadataResponse(
+    string Name,
+    string SourcePropertyName,
+    Guid TargetObjectId,
+    string? TargetObjectName,
+    string TargetPropertyName,
+    RelationshipCardinality Cardinality,
+    RelationshipDeleteBehavior DeleteBehavior,
+    string? DisplayPropertyName,
+    string? Caption,
+    string? Description);
 
 public sealed record WorkflowValidationResponse(
     bool IsValid,

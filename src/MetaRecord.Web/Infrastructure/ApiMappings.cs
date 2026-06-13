@@ -15,6 +15,9 @@ internal static class ApiMappings
         TableName = request.TableName,
         Properties = (request.Properties ?? Array.Empty<PropertyMetadataUpsertRequest>())
             .Select(ToMetadata)
+            .ToList(),
+        Relationships = (request.Relationships ?? Array.Empty<RelationshipMetadataUpsertRequest>())
+            .Select(ToMetadata)
             .ToList()
     };
 
@@ -22,7 +25,8 @@ internal static class ApiMappings
         metadata.Id,
         metadata.Name,
         metadata.TableName,
-        metadata.Properties.Select(ToResponse).ToList());
+        metadata.Properties.Select(ToResponse).ToList(),
+        metadata.Relationships.Select(ToResponse).ToList());
 
     public static WorkflowRunSummaryResponse ToSummaryResponse(WorkflowRunEntity run) => new(
         run.Id,
@@ -93,6 +97,20 @@ internal static class ApiMappings
         };
     }
 
+    private static RelationshipMetadata ToMetadata(RelationshipMetadataUpsertRequest relationship) => new(
+        relationship.Name,
+        relationship.SourcePropertyName,
+        relationship.TargetObjectId)
+    {
+        TargetObjectName = relationship.TargetObjectName,
+        TargetPropertyName = string.IsNullOrWhiteSpace(relationship.TargetPropertyName) ? "Id" : relationship.TargetPropertyName,
+        Cardinality = relationship.Cardinality,
+        DeleteBehavior = relationship.DeleteBehavior,
+        DisplayPropertyName = relationship.DisplayPropertyName,
+        Caption = relationship.Caption,
+        Description = relationship.Description
+    };
+
     private static PropertyMetadataResponse ToResponse(PropertyMetadata property) => new(
         property.Name,
         property.ColumnName,
@@ -103,6 +121,18 @@ internal static class ApiMappings
         property.IsPrimaryKey,
         property.DefaultValue,
         property.Caption);
+
+    private static RelationshipMetadataResponse ToResponse(RelationshipMetadata relationship) => new(
+        relationship.Name,
+        relationship.SourcePropertyName,
+        relationship.TargetObjectId,
+        relationship.TargetObjectName,
+        relationship.TargetPropertyName,
+        relationship.Cardinality,
+        relationship.DeleteBehavior,
+        relationship.DisplayPropertyName,
+        relationship.Caption,
+        relationship.Description);
 
     private static WorkflowRunStepResponse ToResponse(WorkflowRunStepEntity step) => new(
         step.Id,

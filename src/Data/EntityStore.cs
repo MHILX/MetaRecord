@@ -152,6 +152,24 @@ public class EntityStore
             : new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
     }
 
+    public Dictionary<string, object?>? FindValuesByColumn(IObjectMetadata metadata, string columnName, object? value)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+
+        if (string.IsNullOrWhiteSpace(columnName))
+            throw new ArgumentException("Column name is required.", nameof(columnName));
+
+        var sql = $"SELECT * FROM {metadata.TableName} WHERE {columnName} = @Value LIMIT 1";
+
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        using var command = new SqliteCommand(sql, connection);
+        command.Parameters.Add(new SqliteParameter("@Value", ConvertToSqliteValue(value) ?? DBNull.Value));
+
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? MapToValues(reader, metadata) : null;
+    }
+
     public List<Dictionary<string, object?>> AllValues(IObjectMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(metadata);

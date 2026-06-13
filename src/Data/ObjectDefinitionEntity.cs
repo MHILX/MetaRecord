@@ -38,4 +38,7 @@ public class ObjectDefinitionEntity
 
     // Navigation property
     public List<PropertyDefinitionEntity> Properties { get; set; } = new();
+
+    // Navigation property
+    public List<RelationshipDefinitionEntity> Relationships { get; set; } = new();
 }

@@ -11,6 +11,7 @@ public class MetaRecordDbContext : DbContext
 {
     public DbSet<ObjectDefinitionEntity> ObjectDefinitions => Set<ObjectDefinitionEntity>();
     public DbSet<PropertyDefinitionEntity> PropertyDefinitions => Set<PropertyDefinitionEntity>();
+    public DbSet<RelationshipDefinitionEntity> RelationshipDefinitions => Set<RelationshipDefinitionEntity>();
     public DbSet<MetadataVersionEntity> MetadataVersions => Set<MetadataVersionEntity>();
     public DbSet<WorkflowDefinitionEntity> WorkflowDefinitions => Set<WorkflowDefinitionEntity>();
     public DbSet<WorkflowRunEntity> WorkflowRuns => Set<WorkflowRunEntity>();
@@ -48,6 +49,11 @@ public class MetaRecordDbContext : DbContext
                   .WithOne(p => p.Object)
                   .HasForeignKey(p => p.ObjectId)
                   .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Relationships)
+                .WithOne(r => r.Object)
+                .HasForeignKey(r => r.ObjectId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // PropertyDefinition configuration
@@ -56,6 +62,22 @@ public class MetaRecordDbContext : DbContext
             entity.ToTable("PropertyDefinitions", "meta");
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.ObjectId, e.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<RelationshipDefinitionEntity>(entity =>
+        {
+            entity.ToTable("RelationshipDefinitions", "meta");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.SourcePropertyName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.TargetPropertyName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.DisplayPropertyName).HasMaxLength(100);
+            entity.Property(e => e.Cardinality).HasConversion<string>().HasMaxLength(50).IsRequired();
+            entity.Property(e => e.DeleteBehavior).HasConversion<string>().HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Caption).HasMaxLength(250);
+            entity.HasIndex(e => new { e.ObjectId, e.Name }).IsUnique();
+            entity.HasIndex(e => new { e.ObjectId, e.SourcePropertyName }).IsUnique();
+            entity.HasIndex(e => e.TargetObjectId);
         });
 
         // MetadataVersion configuration

@@ -16,8 +16,8 @@ internal static class MetaRecordInitialization
         var metadataRepository = scope.ServiceProvider.GetRequiredService<MetadataRepository>();
 
         await MetadataLoader.InitializeAsync(context, DemoMetadataSeeder.CreateDemoMetadata());
+        await MetadataRegistrySynchronizer.RefreshAsync(metadataRepository, entityStore);
         var workflowRepository = scope.ServiceProvider.GetRequiredService<WorkflowRepository>();
         await DemoWorkflowSeeder.SeedAsync(workflowRepository);
-        await MetadataRegistrySynchronizer.RefreshAsync(metadataRepository, entityStore);
     }
 }

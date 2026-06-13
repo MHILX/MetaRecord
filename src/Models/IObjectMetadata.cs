@@ -9,6 +9,7 @@ public interface IObjectMetadata
     string Name { get; }
     string TableName { get; }
     IReadOnlyList<PropertyMetadata> Properties { get; }
+    IReadOnlyList<RelationshipMetadata> Relationships { get; }
 }
 
 /// <summary>
@@ -20,6 +21,7 @@ public class ObjectMetadata : IObjectMetadata
     public required string Name { get; init; }
     public required string TableName { get; init; }
     public required IReadOnlyList<PropertyMetadata> Properties { get; init; }
+    public IReadOnlyList<RelationshipMetadata> Relationships { get; init; } = Array.Empty<RelationshipMetadata>();
 }
 
 /// <summary>

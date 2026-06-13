@@ -24,11 +24,42 @@ export interface PropertyMetadata {
   caption?: string | null;
 }
 
+export type RelationshipCardinality = 'ManyToOne' | 'OneToOne' | 'OneToMany' | 'ManyToMany';
+
+export type RelationshipDeleteBehavior = 'Restrict' | 'SetNull' | 'Cascade' | 'NoAction';
+
+export interface RelationshipMetadata {
+  name: string;
+  sourcePropertyName: string;
+  targetObjectId: string;
+  targetObjectName?: string | null;
+  targetPropertyName: string;
+  cardinality: RelationshipCardinality;
+  deleteBehavior: RelationshipDeleteBehavior;
+  displayPropertyName?: string | null;
+  caption?: string | null;
+  description?: string | null;
+}
+
+export interface RelationshipMetadataUpsertRequest {
+  name: string;
+  sourcePropertyName: string;
+  targetObjectId: string;
+  targetObjectName?: string | null;
+  targetPropertyName?: string | null;
+  cardinality: RelationshipCardinality;
+  deleteBehavior: RelationshipDeleteBehavior;
+  displayPropertyName?: string | null;
+  caption?: string | null;
+  description?: string | null;
+}
+
 export interface ObjectMetadata {
   id: string;
   name: string;
   tableName: string;
   properties: PropertyMetadata[];
+  relationships: RelationshipMetadata[];
 }
 
 export interface MetadataRecordSaveRequest {
@@ -59,6 +90,7 @@ export interface ObjectMetadataUpsertRequest {
   name: string;
   tableName: string;
   properties: PropertyMetadataUpsertRequest[];
+  relationships: RelationshipMetadataUpsertRequest[];
 }
 
 export interface MetadataValidationIssue {

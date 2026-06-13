@@ -1,7 +1,7 @@
 import { Database, FilePlus2, Save } from 'lucide-react';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { ApiError, workflowApi } from '../api/client';
-import type { MetadataRecordValues, ObjectMetadata, PropertyMetadata } from '../api/types';
+import type { MetadataRecordValues, ObjectMetadata, PropertyMetadata, RelationshipMetadata } from '../api/types';
 import { EditorPrimaryNav } from '../navigation/EditorPrimaryNav';
 import { MetadataManager, type MetadataSelectionId } from '../workflow/MetadataManager';
 
@@ -17,6 +17,8 @@ export function MetadataViewerPage() {
   const [selectedMetadataObjectId, setSelectedMetadataObjectId] = useState<MetadataSelectionId>(null);
   const [formValues, setFormValues] = useState<MetadataFormValues>({});
   const [recordRows, setRecordRows] = useState<MetadataRecordValues[]>([]);
+  const [lookupRecordsByObjectId, setLookupRecordsByObjectId] = useState<Record<string, MetadataRecordValues[]>>({});
+  const [loadingLookupObjectIds, setLoadingLookupObjectIds] = useState<Record<string, boolean>>({});
   const [rightPanelTab, setRightPanelTab] = useState<'form' | 'edit'>('form');
   const [isLoadingObjects, setIsLoadingObjects] = useState(true);
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
@@ -89,6 +91,62 @@ export function MetadataViewerPage() {
     setRecordLoadError(null);
     void loadRecords(selectedObjectRecordId);
   }, [selectedObjectRecordId]);
+
+  useEffect(() => {
+    if (!selectedObject)
+      return;
+
+    const targetObjectIds = Array.from(new Set(selectedObject.relationships.map(relationship => relationship.targetObjectId).filter(Boolean)));
+    if (targetObjectIds.length === 0)
+      return;
+
+    let isCancelled = false;
+
+    for (const targetObjectId of targetObjectIds) {
+      if (lookupRecordsByObjectId[targetObjectId] !== undefined || loadingLookupObjectIds[targetObjectId])
+        continue;
+
+      setLoadingLookupObjectIds(current => ({
+        ...current,
+        [targetObjectId]: true
+      }));
+
+      void loadLookupRecords(targetObjectId);
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+
+    async function loadLookupRecords(targetObjectId: string) {
+      try {
+        const records = await workflowApi.listRecords(targetObjectId);
+        if (isCancelled)
+          return;
+
+        setLookupRecordsByObjectId(current => ({
+          ...current,
+          [targetObjectId]: records
+        }));
+      } catch {
+        if (isCancelled)
+          return;
+
+        setLookupRecordsByObjectId(current => ({
+          ...current,
+          [targetObjectId]: []
+        }));
+      } finally {
+        if (isCancelled)
+          return;
+
+        setLoadingLookupObjectIds(current => ({
+          ...current,
+          [targetObjectId]: false
+        }));
+      }
+    }
+  }, [loadingLookupObjectIds, lookupRecordsByObjectId, selectedObject]);
 
   async function loadObjects() {
     setIsLoadingObjects(true);
@@ -292,12 +350,23 @@ export function MetadataViewerPage() {
                     <p className="metadata-help">No fields are defined for this object.</p>
                   ) : (
                     selectedObject.properties.map(property => (
+                      (() => {
+                        const relationship = selectedObject.relationships.find(item => item.sourcePropertyName === property.name) ?? null;
+                        const lookupRecords = relationship ? lookupRecordsByObjectId[relationship.targetObjectId] ?? [] : [];
+
+                        return (
                       <MetadataPropertyField
                         key={`${property.name}-${property.columnName}`}
                         property={property}
                         value={formValues[property.name] ?? ''}
+                          relationship={relationship}
+                          lookupRecords={lookupRecords}
+                          isLookupLoading={relationship ? Boolean(loadingLookupObjectIds[relationship.targetObjectId]) : false}
+                          metadataObjects={objects}
                         onChange={updateFormValue}
                       />
+                        );
+                      })()
                     ))
                   )}
                 </div>
@@ -420,10 +489,18 @@ function formatRecordValue(value: unknown): string {
 function MetadataPropertyField({
   property,
   value,
+  relationship,
+  lookupRecords,
+  isLookupLoading,
+  metadataObjects,
   onChange
 }: {
   property: PropertyMetadata;
   value: string;
+  relationship?: RelationshipMetadata | null;
+  lookupRecords?: MetadataRecordValues[];
+  isLookupLoading?: boolean;
+  metadataObjects: ObjectMetadata[];
   onChange: (propertyName: string, value: string) => void;
 }) {
   const inputId = `metadata-field-${property.name}`;
@@ -431,6 +508,44 @@ function MetadataPropertyField({
   const fieldMeta = [property.columnName, property.clrType, property.maxLength ? `Max ${property.maxLength}` : null]
     .filter(Boolean)
     .join(' · ');
+
+  if (relationship) {
+    const targetObject = metadataObjects.find(metadataObject => metadataObject.id === relationship.targetObjectId) ?? null;
+    const targetDisplayField = normalizeRelationshipDisplayField(relationship.displayPropertyName) ?? getDefaultDisplayField(targetObject);
+    const targetKeyField = normalizeRelationshipDisplayField(relationship.targetPropertyName) ?? 'Id';
+    const pickerOptions = buildRelationshipPickerOptions(lookupRecords ?? [], targetKeyField, targetDisplayField, targetObject);
+
+    return (
+      <label className="metadata-form-field" htmlFor={inputId}>
+        <span className="metadata-form-field-label-row">
+          <strong>{fieldLabel}</strong>
+          <span className="metadata-form-field-badges">
+            <span className="status-pill">Lookup</span>
+            {property.isRequired && <span className="status-pill">Required</span>}
+          </span>
+        </span>
+
+        <select
+          id={inputId}
+          value={value}
+          onChange={event => onChange(property.name, event.target.value)}
+          disabled={isLookupLoading}
+        >
+          <option value="">{isLookupLoading ? 'Loading lookup values...' : 'Select a related record'}</option>
+          {pickerOptions.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+
+        <small className="metadata-help">
+          {relationship.targetObjectName ?? targetObject?.name ?? 'Related object'} · {relationship.targetPropertyName || 'Id'}
+        </small>
+        {relationship.caption && <small className="metadata-help">{relationship.caption}</small>}
+      </label>
+    );
+  }
 
   if (property.clrType === 'Boolean') {
     return (
@@ -503,8 +618,17 @@ function getInputType(clrType: string): 'text' | 'number' | 'datetime-local' {
 function createFormValues(metadata: ObjectMetadata): MetadataFormValues {
   const values: MetadataFormValues = {};
 
-  for (const property of metadata.properties)
+  const relationshipsBySourceProperty = new Map(metadata.relationships.map(relationship => [relationship.sourcePropertyName.toLowerCase(), relationship] as const));
+
+  for (const property of metadata.properties) {
+    const relationship = relationshipsBySourceProperty.get(property.name.toLowerCase());
+    if (relationship) {
+      values[property.name] = '';
+      continue;
+    }
+
     values[property.name] = createInitialValue(property);
+  }
 
   return values;
 }
@@ -553,4 +677,54 @@ function normalizeDateTimeValue(value: string): string {
     return '';
 
   return toLocalDateTimeValue(parsedDate);
+}
+
+type RelationshipPickerOption = {
+  value: string;
+  label: string;
+};
+
+function buildRelationshipPickerOptions(records: MetadataRecordValues[], keyField: string, displayField: string | null, targetObject: ObjectMetadata | null): RelationshipPickerOption[] {
+  return records
+    .map(record => ({
+      value: normalizeRecordPickerValue(record[keyField] ?? record['Id']),
+      label: formatRelationshipLabel(record, keyField, displayField, targetObject)
+    }))
+    .filter(option => option.value.length > 0);
+}
+
+function formatRelationshipLabel(record: MetadataRecordValues, keyField: string, displayField: string | null, targetObject: ObjectMetadata | null): string {
+  const preferredField = displayField && displayField.trim().length > 0 ? displayField : 'Id';
+  const rawLabel = record[preferredField] ?? record[keyField] ?? record['Id'] ?? record[targetObject?.properties[0]?.name ?? 'Id'] ?? preferredField;
+  const label = formatRecordValue(rawLabel);
+  const idLabel = formatRecordValue(record[keyField] ?? record['Id']);
+
+  if (preferredField === 'Id' || label === idLabel)
+    return label;
+
+  return `${label} (${idLabel})`;
+}
+
+function normalizeRecordPickerValue(value: unknown): string {
+  if (value === null || value === undefined)
+    return '';
+
+  return String(value);
+}
+
+function getDefaultDisplayField(targetObject: ObjectMetadata | null): string | null {
+  if (!targetObject)
+    return null;
+
+  return targetObject.properties.find(property => property.name !== 'Id' && property.clrType === 'String')?.name
+    ?? targetObject.properties.find(property => property.name !== 'Id')?.name
+    ?? 'Id';
+}
+
+function normalizeRelationshipDisplayField(displayPropertyName: string | null | undefined): string | null {
+  if (!displayPropertyName)
+    return null;
+
+  const trimmed = displayPropertyName.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }

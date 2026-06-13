@@ -137,6 +137,8 @@ public static class MetadataEndpoints
                 var values = NormalizeRecordValues(metadata, ApiMappings.ToObjectDictionary(request.Values));
                 var recordId = ResolveRecordId(metadata, values);
 
+                await ValidateRelationshipTargetsAsync(metadata, values, repository, entityStore);
+
                 entityStore.EnsureTableExists(metadata);
 
                 var existingValues = entityStore.FindValues(metadata, recordId);
@@ -286,6 +288,44 @@ public static class MetadataEndpoints
         }
 
         return rawValue;
+    }
+
+    private static async Task ValidateRelationshipTargetsAsync(
+        IObjectMetadata metadata,
+        IReadOnlyDictionary<string, object?> values,
+        MetadataRepository repository,
+        EntityStore entityStore)
+    {
+        if (metadata.Relationships.Count == 0)
+            return;
+
+        var metadataById = (await repository.LoadAllMetadataAsync()).ToDictionary(item => item.Id);
+        var currentObjectId = metadata.Id;
+
+        foreach (var relationship in metadata.Relationships)
+        {
+            if (!values.TryGetValue(relationship.SourcePropertyName, out var rawValue) || rawValue is null)
+                continue;
+
+            if (rawValue is Guid guidValue && guidValue == Guid.Empty)
+                continue;
+
+            if (relationship.TargetObjectId == currentObjectId)
+                throw new InvalidOperationException($"Relationship '{relationship.Name}' cannot target the same object it belongs to.");
+
+            if (!metadataById.TryGetValue(relationship.TargetObjectId, out var targetMetadata))
+                throw new InvalidOperationException($"Relationship '{relationship.Name}' targets an unknown object.");
+
+            var targetPropertyName = string.IsNullOrWhiteSpace(relationship.TargetPropertyName) ? "Id" : relationship.TargetPropertyName;
+            var targetProperty = targetMetadata.Properties.FirstOrDefault(property => string.Equals(property.Name, targetPropertyName, StringComparison.OrdinalIgnoreCase));
+
+            if (targetProperty is null)
+                throw new InvalidOperationException($"Relationship '{relationship.Name}' targets missing property '{targetPropertyName}' on object '{targetMetadata.Name}'.");
+
+            var targetRecord = entityStore.FindValuesByColumn(targetMetadata, targetProperty.ColumnName, rawValue);
+            if (targetRecord is null || targetRecord.Count == 0)
+                throw new InvalidOperationException($"Relationship '{relationship.Name}' points to a missing '{targetMetadata.Name}' record.");
+        }
     }
 
     private static Guid ResolveRecordId(IObjectMetadata metadata, IDictionary<string, object?> values)

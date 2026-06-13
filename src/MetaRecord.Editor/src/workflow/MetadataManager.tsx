@@ -6,7 +6,10 @@ import type {
   MetadataValidationResponse,
   ObjectMetadata,
   ObjectMetadataUpsertRequest,
-  PropertyMetadataUpsertRequest
+  PropertyMetadataUpsertRequest,
+  RelationshipCardinality,
+  RelationshipDeleteBehavior,
+  RelationshipMetadataUpsertRequest
 } from '../api/types';
 
 interface MetadataManagerProps {
@@ -26,6 +29,19 @@ interface MetadataManagerProps {
 export type MetadataSelectionId = string | 'new' | null;
 
 const supportedClrTypes = ['Guid', 'String', 'Int32', 'Int64', 'Decimal', 'Double', 'Boolean', 'DateTime'] as const;
+const supportedRelationshipCardinalities: Array<{ value: RelationshipCardinality; label: string }> = [
+  { value: 'ManyToOne', label: 'Many to one' },
+  { value: 'OneToOne', label: 'One to one' },
+  { value: 'OneToMany', label: 'One to many' },
+  { value: 'ManyToMany', label: 'Many to many' }
+];
+
+const supportedRelationshipDeleteBehaviors: Array<{ value: RelationshipDeleteBehavior; label: string }> = [
+  { value: 'Restrict', label: 'Restrict' },
+  { value: 'SetNull', label: 'Set null' },
+  { value: 'Cascade', label: 'Cascade' },
+  { value: 'NoAction', label: 'No action' }
+];
 
 export function MetadataManager({
   metadataObjects,
@@ -145,6 +161,33 @@ export function MetadataManager({
     }));
   }
 
+  function addRelationship() {
+    updateDraft(current => {
+      const relationship = createRelationshipDraft(current, metadataObjects);
+      if (!relationship)
+        return current;
+
+      return {
+        ...current,
+        relationships: [...current.relationships, relationship]
+      };
+    });
+  }
+
+  function updateRelationship(index: number, updater: (relationship: RelationshipMetadataUpsertRequest) => RelationshipMetadataUpsertRequest) {
+    updateDraft(current => ({
+      ...current,
+      relationships: current.relationships.map((relationship, relationshipIndex) => relationshipIndex === index ? updater(relationship) : relationship)
+    }));
+  }
+
+  function removeRelationship(index: number) {
+    updateDraft(current => ({
+      ...current,
+      relationships: current.relationships.filter((_, relationshipIndex) => relationshipIndex !== index)
+    }));
+  }
+
   function removeProperty(index: number) {
     if (index === 0)
       return;
@@ -164,9 +207,9 @@ export function MetadataManager({
     }
   }
 
-  async function validateDraft(): Promise<MetadataValidationResponse | null> {
+  async function validateDraft(currentDraft: ObjectMetadataUpsertRequest = draft): Promise<MetadataValidationResponse | null> {
     try {
-      const validation = await workflowApi.validateObject(draft);
+      const validation = await workflowApi.validateObject(normalizeMetadataDraft(currentDraft, metadataObjects));
       setValidationIssues(validation.issues);
       return validation;
     } catch (error) {
@@ -183,7 +226,10 @@ export function MetadataManager({
   async function saveDraft() {
     setIsSaving(true);
     try {
-      const validation = await validateDraft();
+      const normalizedDraft = normalizeMetadataDraft(draft, metadataObjects);
+      setDraft(normalizedDraft);
+
+      const validation = await validateDraft(normalizedDraft);
       if (!validation)
         return;
 
@@ -192,11 +238,11 @@ export function MetadataManager({
         return;
       }
 
-      const savedObject = draft.id
-        ? await workflowApi.updateObject(draft.id, draft)
-        : await workflowApi.createObject(draft);
+      const savedObject = normalizedDraft.id
+        ? await workflowApi.updateObject(normalizedDraft.id, normalizedDraft)
+        : await workflowApi.createObject(normalizedDraft);
 
-      const nextObjects = draft.id
+      const nextObjects = normalizedDraft.id
         ? metadataObjects.map(metadataObject => metadataObject.id === savedObject.id ? savedObject : metadataObject)
         : [...metadataObjects, savedObject];
 
@@ -291,7 +337,7 @@ export function MetadataManager({
                 <strong>{metadataObject.name}</strong>
                 <small>{metadataObject.tableName}</small>
               </span>
-              <em>{metadataObject.properties.length} props</em>
+              <em>{metadataObject.properties.length} props, {metadataObject.relationships.length} rels</em>
             </button>
           ))}
         </div>
@@ -360,6 +406,39 @@ export function MetadataManager({
               Add property
             </button>
 
+            <div className="metadata-section-header">
+              <div>
+                <h3>Relationships</h3>
+                <p className="metadata-help">Lookup relationships store a Guid on this object and point it at a target object.</p>
+              </div>
+              <button className="secondary-button" type="button" onClick={addRelationship} disabled={metadataObjects.length === 0}>
+                <Plus size={16} aria-hidden="true" />
+                Add relationship
+              </button>
+            </div>
+
+            {metadataObjects.length === 0 && (
+              <p className="metadata-help">Create or load at least one object before adding relationships.</p>
+            )}
+
+            {draft.relationships.length === 0 ? (
+              <p className="metadata-help">No relationships defined yet.</p>
+            ) : (
+              <div className="metadata-relationship-list">
+                {draft.relationships.map((relationship, index) => (
+                  <MetadataRelationshipCard
+                    key={index}
+                    relationship={relationship}
+                    index={index}
+                    metadataObjects={metadataObjects}
+                    sourceProperties={draft.properties}
+                    onChange={updater => updateRelationship(index, updater)}
+                    onDelete={() => removeRelationship(index)}
+                  />
+                ))}
+              </div>
+            )}
+
             {validationIssues.length > 0 && (
               <div className="issue-list metadata-issues">
                 {validationIssues.map((issue, index) => (
@@ -383,7 +462,7 @@ export function MetadataManager({
                 <X size={16} aria-hidden="true" />
                 Discard
               </button>
-              <button className="secondary-button" type="button" onClick={validateDraft} disabled={isSaving}>
+              <button className="secondary-button" type="button" onClick={() => validateDraft()} disabled={isSaving}>
                 Validate
               </button>
               <button className="primary-button" type="button" onClick={saveDraft} disabled={isSaving}>
@@ -571,6 +650,69 @@ function getMetadataChangeWarnings(original: ObjectMetadata, draft: ObjectMetada
     }
   }
 
+  const originalRelationshipsByName = new Map(original.relationships.map(relationship => [relationship.name.toLowerCase(), relationship] as const));
+  const draftRelationshipsByName = new Map(draft.relationships.map(relationship => [relationship.name.toLowerCase(), relationship] as const));
+
+  for (const originalRelationship of original.relationships) {
+    const draftRelationship = draftRelationshipsByName.get(originalRelationship.name.toLowerCase());
+    if (!draftRelationship) {
+      warnings.push({
+        title: `Relationship removed: ${originalRelationship.name}`,
+        message: 'Removing a relationship can break lookup forms, display fields, and workflows that expect the link to exist.',
+        field: `relationships.${originalRelationship.name}`
+      });
+      continue;
+    }
+
+    if (originalRelationship.sourcePropertyName !== draftRelationship.sourcePropertyName) {
+      warnings.push({
+        title: `Source field changed: ${originalRelationship.name}`,
+        message: 'Changing the source field can break the lookup field that stores the related record id.',
+        field: `relationships.${originalRelationship.name}.sourcePropertyName`
+      });
+    }
+
+    if (originalRelationship.targetObjectId !== draftRelationship.targetObjectId) {
+      warnings.push({
+        title: `Target object changed: ${originalRelationship.name}`,
+        message: 'Changing the target object can alter the meaning of existing relationship values.',
+        field: `relationships.${originalRelationship.name}.targetObjectId`
+      });
+    }
+
+    if (originalRelationship.targetPropertyName !== draftRelationship.targetPropertyName) {
+      warnings.push({
+        title: `Target key changed: ${originalRelationship.name}`,
+        message: 'Changing the target key can make existing lookup values resolve differently.',
+        field: `relationships.${originalRelationship.name}.targetPropertyName`
+      });
+    }
+
+    if (originalRelationship.cardinality !== draftRelationship.cardinality) {
+      warnings.push({
+        title: `Cardinality changed: ${originalRelationship.name}`,
+        message: 'Changing relationship cardinality can affect how the runtime interprets the link.',
+        field: `relationships.${originalRelationship.name}.cardinality`
+      });
+    }
+
+    if (originalRelationship.deleteBehavior !== draftRelationship.deleteBehavior) {
+      warnings.push({
+        title: `Delete behavior changed: ${originalRelationship.name}`,
+        message: 'Changing delete behavior can alter how related records are handled when the target is removed.',
+        field: `relationships.${originalRelationship.name}.deleteBehavior`
+      });
+    }
+
+    if (originalRelationship.displayPropertyName !== draftRelationship.displayPropertyName) {
+      warnings.push({
+        title: `Display field changed: ${originalRelationship.name}`,
+        message: 'Changing the display property can alter how the relationship appears in the editor and runtime.',
+        field: `relationships.${originalRelationship.name}.displayPropertyName`
+      });
+    }
+  }
+
   return warnings;
 }
 
@@ -671,12 +813,161 @@ function MetadataPropertyCard({ property, index, canDelete, onChange, onDelete }
   );
 }
 
+interface MetadataRelationshipCardProps {
+  relationship: RelationshipMetadataUpsertRequest;
+  index: number;
+  metadataObjects: ObjectMetadata[];
+  sourceProperties: PropertyMetadataUpsertRequest[];
+  onChange: (updater: (relationship: RelationshipMetadataUpsertRequest) => RelationshipMetadataUpsertRequest) => void;
+  onDelete: () => void;
+}
+
+function MetadataRelationshipCard({ relationship, index, metadataObjects, sourceProperties, onChange, onDelete }: MetadataRelationshipCardProps) {
+  const sourcePropertyOptions = buildGuidPropertyOptions(sourceProperties, relationship.sourcePropertyName);
+  const targetObjectOptions = buildObjectOptions(metadataObjects, relationship.targetObjectId, relationship.targetObjectName);
+  const selectedTargetObject = metadataObjects.find(metadataObject => metadataObject.id === relationship.targetObjectId) ?? null;
+  const targetPropertyOptions = buildGuidPropertyOptions(selectedTargetObject?.properties ?? [], relationship.targetPropertyName);
+
+  function updateRelationshipField(field: keyof RelationshipMetadataUpsertRequest, value: string | null) {
+    onChange(current => ({
+      ...current,
+      [field]: value
+    }));
+  }
+
+  function updateTargetObject(targetObjectId: string) {
+    const selectedObject = metadataObjects.find(metadataObject => metadataObject.id === targetObjectId) ?? null;
+    const nextTargetPropertyName = getPreferredGuidPropertyName(selectedObject?.properties ?? []) ?? 'Id';
+
+    onChange(current => ({
+      ...current,
+      targetObjectId,
+      targetObjectName: selectedObject?.name ?? null,
+      targetPropertyName: nextTargetPropertyName
+    }));
+  }
+
+  return (
+    <article className="metadata-relationship-card">
+      <div className="metadata-property-card-header">
+        <strong>{relationship.name || `Relationship ${index + 1}`}</strong>
+        <button className="icon-button" type="button" onClick={onDelete} title="Remove relationship">
+          <Trash2 size={14} aria-hidden="true" />
+        </button>
+      </div>
+
+      <p className="metadata-help">
+        {relationship.sourcePropertyName || 'Source property'} → {relationship.targetObjectName || 'Target object'}.{relationship.targetPropertyName || 'Id'}
+      </p>
+
+      <div className="metadata-relationship-grid">
+        <label className="field-control">
+          <span>Name</span>
+          <input
+            value={relationship.name}
+            onChange={event => updateRelationshipField('name', event.target.value)}
+            placeholder="TodoOwner"
+          />
+        </label>
+
+        <label className="field-control">
+          <span>Source property</span>
+          <select
+            value={relationship.sourcePropertyName}
+            onChange={event => updateRelationshipField('sourcePropertyName', event.target.value)}
+          >
+            {sourcePropertyOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field-control">
+          <span>Target object</span>
+          <select
+            value={relationship.targetObjectId}
+            onChange={event => updateTargetObject(event.target.value)}
+          >
+            {targetObjectOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field-control">
+          <span>Target property</span>
+          <select
+            value={relationship.targetPropertyName ?? 'Id'}
+            onChange={event => updateRelationshipField('targetPropertyName', event.target.value)}
+          >
+            {targetPropertyOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field-control">
+          <span>Cardinality</span>
+          <select
+            value={relationship.cardinality}
+            onChange={event => updateRelationshipField('cardinality', event.target.value as RelationshipCardinality)}
+          >
+            {supportedRelationshipCardinalities.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field-control">
+          <span>Delete behavior</span>
+          <select
+            value={relationship.deleteBehavior}
+            onChange={event => updateRelationshipField('deleteBehavior', event.target.value as RelationshipDeleteBehavior)}
+          >
+            {supportedRelationshipDeleteBehaviors.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field-control field-control-full">
+          <span>Display property name</span>
+          <input
+            value={relationship.displayPropertyName ?? ''}
+            onChange={event => updateRelationshipField('displayPropertyName', toNullableText(event.target.value))}
+            placeholder="Optional display field on the target object"
+          />
+        </label>
+
+        <label className="field-control">
+          <span>Caption</span>
+          <input
+            value={relationship.caption ?? ''}
+            onChange={event => updateRelationshipField('caption', toNullableText(event.target.value))}
+            placeholder="Optional"
+          />
+        </label>
+
+        <label className="field-control field-control-full">
+          <span>Description</span>
+          <textarea
+            value={relationship.description ?? ''}
+            onChange={event => updateRelationshipField('description', toNullableText(event.target.value))}
+            placeholder="Optional"
+          />
+        </label>
+      </div>
+    </article>
+  );
+}
+
 function createNewMetadataDraft(): ObjectMetadataUpsertRequest {
   return {
     id: null,
     name: 'NewDomainObject',
     tableName: 'NewDomainObjects',
-    properties: [createIdPropertyDraft()]
+    properties: [createIdPropertyDraft()],
+    relationships: []
   };
 }
 
@@ -708,12 +999,126 @@ function createPropertyDraft(name: string): PropertyMetadataUpsertRequest {
   };
 }
 
+type RelationshipSelectOption = {
+  value: string;
+  label: string;
+};
+
+function buildObjectOptions(metadataObjects: ObjectMetadata[], currentValue?: string | null, currentLabel?: string | null): RelationshipSelectOption[] {
+  const options = metadataObjects.map(metadataObject => ({
+    value: metadataObject.id,
+    label: metadataObject.name
+  }));
+
+  if (currentValue && !options.some(option => option.value === currentValue)) {
+    options.unshift({
+      value: currentValue,
+      label: currentLabel ? `${currentLabel} (missing)` : 'Missing target object'
+    });
+  }
+
+  return options;
+}
+
+function buildGuidPropertyOptions(properties: PropertyMetadataUpsertRequest[], currentValue?: string | null): RelationshipSelectOption[] {
+  const options = properties
+    .filter(property => property.clrType === 'Guid')
+    .map(property => ({
+      value: property.name,
+      label: property.caption ? `${property.name} - ${property.caption}` : property.name
+    }));
+
+  if (currentValue && !options.some(option => option.value === currentValue)) {
+    options.unshift({
+      value: currentValue,
+      label: `${currentValue} (missing)`
+    });
+  }
+
+  if (options.length === 0) {
+    options.push({
+      value: 'Id',
+      label: 'Id'
+    });
+  }
+
+  return options;
+}
+
+function getPreferredGuidPropertyName(properties: PropertyMetadataUpsertRequest[]) {
+  return properties.find(property => property.clrType === 'Guid' && property.isPrimaryKey)?.name
+    ?? properties.find(property => property.clrType === 'Guid')?.name
+    ?? null;
+}
+
+function getUniqueRelationshipName(existingRelationships: Array<{ name: string }>) {
+  const existingNames = new Set(existingRelationships.map(relationship => relationship.name.toLowerCase()));
+  let suffix = existingRelationships.length + 1;
+  let candidate = `Relationship${suffix}`;
+
+  while (existingNames.has(candidate.toLowerCase())) {
+    suffix += 1;
+    candidate = `Relationship${suffix}`;
+  }
+
+  return candidate;
+}
+
+function createRelationshipDraft(currentDraft: ObjectMetadataUpsertRequest, metadataObjects: ObjectMetadata[]): RelationshipMetadataUpsertRequest | null {
+  if (metadataObjects.length === 0)
+    return null;
+
+  const targetObject = currentDraft.id
+    ? metadataObjects.find(metadataObject => metadataObject.id !== currentDraft.id) ?? metadataObjects[0]
+    : metadataObjects[0];
+
+  const sourcePropertyName = getPreferredGuidPropertyName(currentDraft.properties) ?? currentDraft.properties[0]?.name ?? 'Id';
+  const targetPropertyName = getPreferredGuidPropertyName(targetObject.properties) ?? 'Id';
+
+  return {
+    name: getUniqueRelationshipName(currentDraft.relationships),
+    sourcePropertyName,
+    targetObjectId: targetObject.id,
+    targetObjectName: targetObject.name,
+    targetPropertyName,
+    cardinality: 'ManyToOne',
+    deleteBehavior: 'Restrict',
+    displayPropertyName: null,
+    caption: null,
+    description: null
+  };
+}
+
+function normalizeMetadataDraft(metadataDraft: ObjectMetadataUpsertRequest, metadataObjects: ObjectMetadata[]): ObjectMetadataUpsertRequest {
+  const targetObjectsById = new Map(metadataObjects.map(metadataObject => [metadataObject.id, metadataObject] as const));
+
+  return {
+    ...metadataDraft,
+    properties: metadataDraft.properties.map(property => ({ ...property })),
+    relationships: metadataDraft.relationships.map(relationship => {
+      const targetObject = targetObjectsById.get(relationship.targetObjectId);
+
+      return {
+        ...relationship,
+        targetObjectName: targetObject?.name ?? relationship.targetObjectName ?? null,
+        targetPropertyName: relationship.targetPropertyName || getPreferredGuidPropertyName(targetObject?.properties ?? []) || 'Id'
+      };
+    })
+  };
+}
+
+function toNullableText(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function toMetadataDraft(metadataObject: ObjectMetadata): ObjectMetadataUpsertRequest {
   return {
     id: metadataObject.id,
     name: metadataObject.name,
     tableName: metadataObject.tableName,
-    properties: metadataObject.properties.map(property => ({ ...property }))
+    properties: metadataObject.properties.map(property => ({ ...property })),
+    relationships: metadataObject.relationships.map(relationship => ({ ...relationship }))
   };
 }
 
