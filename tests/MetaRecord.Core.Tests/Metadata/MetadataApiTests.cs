@@ -190,6 +190,54 @@ public sealed class MetadataApiTests
     }
 
     [Fact]
+    public async Task Metadata_record_reads_can_expand_related_records()
+    {
+        using var factory = new MetaRecordWebApiFactory();
+        var client = factory.CreateClient();
+        var todoObjectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var notebookId = Guid.NewGuid();
+        var notebookRequest = CreateNotebookWithRelationshipRequest(notebookId, todoObjectId);
+
+        var createMetadataResponse = await client.PostAsJsonAsync("/api/metadata/objects", notebookRequest);
+        createMetadataResponse.EnsureSuccessStatusCode();
+
+        var todoRecordId = Guid.NewGuid();
+        var createTodoResponse = await client.PostAsJsonAsync(
+            "/api/metadata/objects/11111111-1111-1111-1111-111111111111/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(todoRecordId, JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Expanded todo", JsonOptions)
+            }));
+
+        createTodoResponse.EnsureSuccessStatusCode();
+
+        var saveNotebookResponse = await client.PostAsJsonAsync(
+            $"/api/metadata/objects/{notebookId}/records",
+            new MetadataRecordSaveRequest(new Dictionary<string, JsonElement>
+            {
+                ["Id"] = JsonSerializer.SerializeToElement(Guid.NewGuid(), JsonOptions),
+                ["Title"] = JsonSerializer.SerializeToElement("Notebook for expansion", JsonOptions),
+                ["TodoId"] = JsonSerializer.SerializeToElement(todoRecordId, JsonOptions)
+            }));
+
+        saveNotebookResponse.EnsureSuccessStatusCode();
+
+        var expandedRecords = await client.GetFromJsonAsync<Dictionary<string, JsonElement>[]>($"/api/metadata/objects/{notebookId}/records?expandRelationships=true", JsonOptions);
+        Assert.NotNull(expandedRecords);
+        Assert.Single(expandedRecords);
+
+        var record = expandedRecords[0];
+        Assert.True(record.ContainsKey("__relationships"));
+
+        var relationships = record["__relationships"].EnumerateArray().ToArray();
+        Assert.Single(relationships);
+        Assert.Equal("Todo", relationships[0].GetProperty("name").GetString());
+        Assert.True(relationships[0].GetProperty("isResolved").GetBoolean());
+        Assert.Equal("Expanded todo", relationships[0].GetProperty("displayValue").GetString());
+    }
+
+    [Fact]
     public async Task Metadata_existing_guid_field_can_be_promoted_to_relationship_without_rewriting_records()
     {
         using var factory = new MetaRecordWebApiFactory();
@@ -230,6 +278,17 @@ public sealed class MetadataApiTests
         updateMetadataResponse.EnsureSuccessStatusCode();
         Assert.NotNull(updateValidation);
         Assert.Single(updateValidation.Relationships);
+
+        using (var connection = new SqliteConnection($"Data Source={factory.DbPath}"))
+        {
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'IX_Notebooks_TodoId'";
+
+            var indexName = command.ExecuteScalar() as string;
+            Assert.Equal("IX_Notebooks_TodoId", indexName);
+        }
 
         var loadedRecords = await client.GetFromJsonAsync<Dictionary<string, JsonElement>[]>($"/api/metadata/objects/{notebookId}/records", JsonOptions);
         Assert.NotNull(loadedRecords);

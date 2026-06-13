@@ -73,7 +73,7 @@ export const workflowApi = {
     method: 'POST',
     body: JSON.stringify(requestBody)
   }),
-  listRecords: (objectId: string) => request<MetadataRecordValues[]>(`/api/metadata/objects/${encodeURIComponent(objectId)}/records`),
+  listRecords: (objectId: string, expandRelationships = false) => request<MetadataRecordValues[]>(`/api/metadata/objects/${encodeURIComponent(objectId)}/records${expandRelationships ? '?expandRelationships=true' : ''}`),
   updateObject: (id: string, requestBody: ObjectMetadataUpsertRequest) => request<ObjectMetadata>(`/api/metadata/objects/${id}`, {
     method: 'PUT',
     body: JSON.stringify(requestBody)

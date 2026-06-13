@@ -66,6 +66,7 @@ public class EntityStore
 
         var createSql = $"CREATE TABLE IF NOT EXISTS {metadata.TableName} ({string.Join(", ", columns)})";
         ExecuteNonQuery(createSql);
+        EnsureRelationshipIndexes(metadata);
     }
 
     /// <summary>
@@ -132,6 +133,23 @@ public class EntityStore
 
         var sql = $"INSERT INTO {metadata.TableName} ({string.Join(", ", columns)}) VALUES ({string.Join(", ", parameters)})";
         ExecuteNonQuery(sql, sqlParameters.ToArray());
+    }
+
+    private void EnsureRelationshipIndexes(IObjectMetadata metadata)
+    {
+        if (metadata.Relationships.Count == 0)
+            return;
+
+        foreach (var relationship in metadata.Relationships)
+        {
+            var sourceProperty = metadata.Properties.FirstOrDefault(property => string.Equals(property.Name, relationship.SourcePropertyName, StringComparison.OrdinalIgnoreCase));
+            if (sourceProperty is null)
+                continue;
+
+            var indexName = BuildRelationshipIndexName(metadata.TableName, sourceProperty.ColumnName);
+            var sql = $"CREATE INDEX IF NOT EXISTS {indexName} ON {metadata.TableName} ({sourceProperty.ColumnName})";
+            ExecuteNonQuery(sql);
+        }
     }
 
     public Dictionary<string, object?> FindValues(IObjectMetadata metadata, Guid id)
@@ -443,6 +461,8 @@ public class EntityStore
         parameters.Add(parameterName);
         sqlParameters.Add(new SqliteParameter(parameterName, ConvertToSqliteValue(value) ?? DBNull.Value));
     }
+
+    private static string BuildRelationshipIndexName(string tableName, string columnName) => $"IX_{tableName}_{columnName}";
 
     private static bool TryGetOrdinal(SqliteDataReader reader, string columnName, out int ordinal)
     {

@@ -165,13 +165,23 @@ public static class MetadataEndpoints
         group.MapGet("/objects/{id:guid}/records", async (
             Guid id,
             MetadataRepository repository,
-            EntityStore entityStore) =>
+            EntityStore entityStore,
+            bool expandRelationships = false) =>
         {
             var metadata = await repository.GetByIdAsync(id);
             if (metadata is null)
                 return Results.NotFound();
 
-            return Results.Ok(entityStore.AllValues(metadata));
+            var records = entityStore.AllValues(metadata);
+            if (!expandRelationships)
+                return Results.Ok(records);
+
+            var metadataById = (await repository.LoadAllMetadataAsync()).ToDictionary(item => item.Id);
+            var expandedRecords = records
+                .Select(record => ExpandRecord(metadata, record, metadataById, entityStore))
+                .ToList();
+
+            return Results.Ok(expandedRecords);
         });
 
         return app;
@@ -326,6 +336,109 @@ public static class MetadataEndpoints
             if (targetRecord is null || targetRecord.Count == 0)
                 throw new InvalidOperationException($"Relationship '{relationship.Name}' points to a missing '{targetMetadata.Name}' record.");
         }
+    }
+
+    private static Dictionary<string, object?> ExpandRecord(
+        IObjectMetadata metadata,
+        Dictionary<string, object?> record,
+        IReadOnlyDictionary<Guid, IObjectMetadata> metadataById,
+        EntityStore entityStore)
+    {
+        var expandedRecord = new Dictionary<string, object?>(record, StringComparer.OrdinalIgnoreCase);
+        var relationships = LoadRelatedRecords(metadata, record, metadataById, entityStore);
+
+        if (relationships.Count > 0)
+            expandedRecord["__relationships"] = relationships;
+
+        return expandedRecord;
+    }
+
+    private static List<Dictionary<string, object?>> LoadRelatedRecords(
+        IObjectMetadata metadata,
+        IReadOnlyDictionary<string, object?> record,
+        IReadOnlyDictionary<Guid, IObjectMetadata> metadataById,
+        EntityStore entityStore)
+    {
+        var expansions = new List<Dictionary<string, object?>>();
+
+        foreach (var relationship in metadata.Relationships)
+        {
+            if (!record.TryGetValue(relationship.SourcePropertyName, out var rawValue) || rawValue is null)
+                continue;
+
+            if (rawValue is Guid guidValue && guidValue == Guid.Empty)
+                continue;
+
+            var targetMetadata = metadataById.TryGetValue(relationship.TargetObjectId, out var resolvedTarget)
+                ? resolvedTarget
+                : null;
+
+            var targetPropertyName = string.IsNullOrWhiteSpace(relationship.TargetPropertyName) ? "Id" : relationship.TargetPropertyName;
+            var targetProperty = targetMetadata?.Properties.FirstOrDefault(property => string.Equals(property.Name, targetPropertyName, StringComparison.OrdinalIgnoreCase));
+            var targetRecord = targetMetadata is null || targetProperty is null
+                ? null
+                : entityStore.FindValuesByColumn(targetMetadata, targetProperty.ColumnName, rawValue);
+
+            expansions.Add(BuildRelationshipExpansion(relationship, targetMetadata, targetPropertyName, rawValue, targetRecord));
+        }
+
+        return expansions;
+    }
+
+    private static Dictionary<string, object?> BuildRelationshipExpansion(
+        RelationshipMetadata relationship,
+        IObjectMetadata? targetMetadata,
+        string targetPropertyName,
+        object? sourceValue,
+        Dictionary<string, object?>? targetRecord)
+    {
+        var displayValue = GetRelationshipDisplayValue(relationship, targetMetadata, targetRecord);
+
+        return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["name"] = relationship.Name,
+            ["sourcePropertyName"] = relationship.SourcePropertyName,
+            ["sourceValue"] = sourceValue,
+            ["targetObjectId"] = relationship.TargetObjectId,
+            ["targetObjectName"] = targetMetadata?.Name ?? relationship.TargetObjectName,
+            ["targetPropertyName"] = targetPropertyName,
+            ["displayValue"] = displayValue,
+            ["isResolved"] = targetRecord is not null && targetRecord.Count > 0,
+            ["record"] = targetRecord
+        };
+    }
+
+    private static string? GetRelationshipDisplayValue(
+        RelationshipMetadata relationship,
+        IObjectMetadata? targetMetadata,
+        Dictionary<string, object?>? targetRecord)
+    {
+        if (targetMetadata is null || targetRecord is null || targetRecord.Count == 0)
+            return null;
+
+        var displayFieldName = NormalizeRelationshipDisplayField(relationship.DisplayPropertyName) ?? GetDefaultDisplayField(targetMetadata);
+        if (displayFieldName is null)
+            return null;
+
+        return targetRecord.TryGetValue(displayFieldName, out var value)
+            ? value?.ToString()
+            : null;
+    }
+
+    private static string? GetDefaultDisplayField(IObjectMetadata targetMetadata)
+    {
+        return targetMetadata.Properties.FirstOrDefault(property => property.Name != "Id" && property.ClrType == typeof(string))?.Name
+            ?? targetMetadata.Properties.FirstOrDefault(property => property.Name != "Id")?.Name
+            ?? "Id";
+    }
+
+    private static string? NormalizeRelationshipDisplayField(string? displayPropertyName)
+    {
+        if (string.IsNullOrWhiteSpace(displayPropertyName))
+            return null;
+
+        var trimmed = displayPropertyName.Trim();
+        return trimmed.Length > 0 ? trimmed : null;
     }
 
     private static Guid ResolveRecordId(IObjectMetadata metadata, IDictionary<string, object?> values)
