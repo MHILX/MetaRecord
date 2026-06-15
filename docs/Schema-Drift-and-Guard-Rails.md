@@ -7,7 +7,7 @@ In a metadata-driven object model, an entity's "shape" lives in three places at 
 ```
    ┌────────────────────────┐     ┌────────────────────────┐     ┌────────────────────────┐
    │ 1. Metadata rows       │     │ 2. Entity table        │     │ 3. CLR class           │
-       │ ObjectDefinitions      │     │    e.g. Todos          │     │    e.g. Todo.cs        │
+   │ ObjectDefinitions      │     │    e.g. Todos          │     │    e.g. Todo.cs        │
    │ PropertyDefinitions    │     │                        │     │                        │
    │ Name, ColumnName, Type │     │ Column, SQL type, NULL │     │ Properties + types     │
    └────────────────────────┘     └────────────────────────┘     └────────────────────────┘
