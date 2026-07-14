@@ -7,8 +7,12 @@ using MetaRecord.Workflows.Catalog;
 using MetaRecord.Workflows.Persistence;
 using MetaRecord.Workflows.Runtime;
 using MetaRecord.Workflows.Validation;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.SetMinimumLevel(GetLogLevel(
+    builder.Configuration["MetaRecord:LogLevel"] ??
+    Environment.GetEnvironmentVariable("METARECORD_LOG_LEVEL")));
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -35,6 +39,16 @@ builder.Services.AddScoped<IWorkflowEngine>(services =>
 var app = builder.Build();
 
 await app.InitializeMetaRecordAsync();
+
+static LogLevel GetLogLevel(string? value)
+{
+    if (!string.IsNullOrWhiteSpace(value) && Enum.TryParse(value.Trim(), ignoreCase: true, out LogLevel logLevel))
+    {
+        return logLevel;
+    }
+
+    return LogLevel.Warning;
+}
 
 app.MapGet("/", () => Results.Ok(new { name = "MetaRecord Web API", status = "Running" }));
 app.MapMetadataEndpoints();

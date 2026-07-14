@@ -226,7 +226,24 @@ Use the helper script for a one-command launch on Windows:
 .\Start-MetaRecordMvp.ps1
 ```
 
-It starts the API in one PowerShell window and the visual editor in another, then opens the editor automatically. The API uses `http://127.0.0.1:5050` when available and falls back to the next free port if needed; the editor does the same for `5173`. Pass `-ApiPort 5000` if you want the original API port.
+It starts both the API and the visual editor from the current terminal session, then opens the editor automatically. The API uses `http://127.0.0.1:5050` when available and falls back to the next free port if needed; the editor does the same for `5173`. Pass `-ApiPort 5000` if you want the original API port.
+
+If you still want the old behavior with separate PowerShell windows, run:
+
+```powershell
+.\Start-MetaRecordMvp.ps1 -SeparateWindows
+```
+
+### Change Log Level
+
+The API and editor both default to warning-level output so the startup console stays quiet. To change the level, set these environment variables before launching the helper script or the individual processes:
+
+```powershell
+$env:METARECORD_LOG_LEVEL = 'Information' # API: Trace, Debug, Information, Warning, Error, Critical, None
+$env:VITE_LOG_LEVEL = 'info'               # Editor: info, warn, error, silent
+```
+
+Use `Warning` / `warn` to keep the current behavior, or `Error` / `error` if you only want failures.
 
 On startup, the web host seeds the demo metadata plus four demo workflows, so the editor opens with a complete sample workflow set instead of an empty canvas. The default editor selection is the richer "Capture todo snapshot" workflow.
 

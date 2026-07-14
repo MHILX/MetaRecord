@@ -3,8 +3,10 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const logLevel = resolveLogLevel(env.VITE_LOG_LEVEL);
 
   return {
+    logLevel,
     plugins: [react()],
     server: {
       port: 5173,
@@ -17,3 +19,12 @@ export default defineConfig(({ mode }) => {
     }
   };
 });
+
+function resolveLogLevel(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'info' || normalized === 'warn' || normalized === 'error' || normalized === 'silent') {
+    return normalized;
+  }
+
+  return 'warn';
+}
