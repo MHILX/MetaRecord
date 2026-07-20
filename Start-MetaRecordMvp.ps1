@@ -65,6 +65,24 @@ if ($ApiPort -lt 1024) {
     throw 'The API port must be 1024 or higher.'
 }
 
+function Stop-StaleMetaRecordWebProcesses {
+    param(
+        [string]$RepositoryRoot
+    )
+
+    $processPathPattern = "$RepositoryRoot\src\MetaRecord.Web\bin\*\MetaRecord.Web.exe"
+    $staleProcesses = Get-Process -Name 'MetaRecord.Web' -ErrorAction SilentlyContinue | Where-Object {
+        $_.Path -and $_.Path -like $processPathPattern
+    }
+
+    foreach ($staleProcess in $staleProcesses) {
+        Write-Host "Stopping stale MetaRecord.Web process $($staleProcess.Id) before starting a new run..."
+        Stop-Process -Id $staleProcess.Id -Force
+    }
+}
+
+Stop-StaleMetaRecordWebProcesses -RepositoryRoot $repoRoot
+
 $apiPort = Get-FreePort -StartPort $ApiPort
 $editorPort = Get-FreePort -StartPort $EditorPort
 $apiUrl = "http://127.0.0.1:$apiPort"
@@ -118,21 +136,67 @@ function Start-MetaRecordProcess {
     }
 }
 
+function Wait-ForMetaRecordApi {
+    param(
+        [object]$TrackedProcess,
+        [string]$ApiUrl,
+        [int]$TimeoutSeconds = 120
+    )
+
+    $uri = [Uri]$ApiUrl
+    $port = $uri.Port
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
+    $client = [System.Net.Sockets.TcpClient]::new()
+
+    try {
+        Write-Host "Waiting for MetaRecord API to become ready at $ApiUrl..."
+
+        while ([DateTimeOffset]::UtcNow -lt $deadline) {
+            if ($TrackedProcess.Process.HasExited) {
+                throw "MetaRecord API exited with code $($TrackedProcess.Process.ExitCode) before it became ready."
+            }
+
+            try {
+                $connectTask = $client.ConnectAsync($uri.Host, $port)
+                if ($connectTask.Wait(2000) -and $client.Connected) {
+                    Write-Host 'MetaRecord API is ready.'
+                    return
+                }
+            }
+            catch {
+            }
+            finally {
+                if ($client.Connected) {
+                    $client.Dispose()
+                    $client = [System.Net.Sockets.TcpClient]::new()
+                }
+            }
+
+            Start-Sleep -Milliseconds 250
+        }
+
+        throw "Timed out waiting for MetaRecord API to become ready at $ApiUrl."
+    }
+    finally {
+        $client.Dispose()
+    }
+}
+
 function Write-AppendedLogLines {
     param(
         [string]$Path,
         [string]$Prefix,
-        [ref]$Position
+        [long]$Position
     )
 
     if (-not (Test-Path -LiteralPath $Path)) {
-        return
+        return $Position
     }
 
     $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
 
     try {
-        $null = $stream.Seek($Position.Value, [System.IO.SeekOrigin]::Begin)
+        $null = $stream.Seek($Position, [System.IO.SeekOrigin]::Begin)
         $reader = [System.IO.StreamReader]::new($stream)
 
         try {
@@ -143,7 +207,7 @@ function Write-AppendedLogLines {
                 }
             }
 
-            $Position.Value = $stream.Position
+            return $stream.Position
         }
         finally {
             $reader.Dispose()
@@ -160,8 +224,8 @@ function Write-MetaRecordLogs {
     )
 
     foreach ($trackedProcess in $TrackedProcesses) {
-        Write-AppendedLogLines -Path $trackedProcess.StdOutPath -Prefix $trackedProcess.Name -Position ([ref]$trackedProcess.StdOutPosition)
-        Write-AppendedLogLines -Path $trackedProcess.StdErrPath -Prefix ("{0}:err" -f $trackedProcess.Name) -Position ([ref]$trackedProcess.StdErrPosition)
+        $trackedProcess.StdOutPosition = Write-AppendedLogLines -Path $trackedProcess.StdOutPath -Prefix $trackedProcess.Name -Position $trackedProcess.StdOutPosition
+        $trackedProcess.StdErrPosition = Write-AppendedLogLines -Path $trackedProcess.StdErrPath -Prefix ("{0}:err" -f $trackedProcess.Name) -Position $trackedProcess.StdErrPosition
     }
 }
 
@@ -199,6 +263,8 @@ $apiProcess = Start-MetaRecordProcess -Name 'api' -WorkingDirectory $repoRoot -C
 if ($null -ne $apiProcess) {
     $trackedProcesses += $apiProcess
 }
+
+Wait-ForMetaRecordApi -TrackedProcess $apiProcess -ApiUrl $apiUrl
 
 $editorCommand = @"
 `$env:VITE_API_PROXY_TARGET = '$apiUrl'
